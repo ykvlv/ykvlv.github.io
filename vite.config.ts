@@ -12,9 +12,10 @@ export default defineConfig({
       registerType: 'autoUpdate',
       workbox: {
         globPatterns: ['**/*.{js,css,html,png,svg}'],
+        navigateFallbackDenylist: [/^\/(cv)(\/.*)?$/],
         runtimeCaching: [
           {
-            urlPattern: () => true,
+            urlPattern: /^\/(cv)(\/.*)?$/,
             handler: 'NetworkFirst',
             options: {
               cacheName: 'ykvlv',
