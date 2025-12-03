@@ -1,0 +1,35 @@
+:root {
+  /* Colors */
+  --color-background: #818cf8;
+  --color-foreground: #ffffff;
+  --color-accent: #1e1b4b;
+  --color-muted: rgba(255, 255, 255, 0.6);
+
+  /* Project-specific colors */
+  --color-watchlog-primary: #ef4444;
+}
+
+/* Base styles */
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  min-height: 100vh;
+  margin: 0;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Light theme */
+@media (prefers-color-scheme: light) {
+  :root {
+    --color-background: #fafafa;
+    --color-foreground: #1e1b4b;
+    --color-accent: #818cf8;
+    --color-muted: #64748b;
+  }
+}
