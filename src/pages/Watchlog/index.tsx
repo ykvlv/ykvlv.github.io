@@ -17,7 +17,7 @@ export default function Watchlog() {
             Watchlog
           </h1>
           <p className="mt-3 text-muted-foreground">
-            Movies and TV shows I&apos;ve been watching, synced from Trakt.
+            Movies and TV shows I've been watching, synced from Trakt.
           </p>
           {data?.updated_at && (
             <p className="mt-2 text-xs text-muted-foreground">

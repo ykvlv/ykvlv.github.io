@@ -25,6 +25,9 @@ jobs:
 
       - name: 🏗 Build project
         run: bun run build
+        env:
+          GIST_ID: ${{ vars.GIST_ID }}
+          GIST_FILENAME: ${{ vars.GIST_FILENAME }}
 
       - name: 📤 Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v3
