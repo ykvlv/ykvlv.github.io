@@ -1,2 +1,16 @@
 /// <reference types="vite/client" />
-/// <reference types="unocss" />
+
+declare module 'virtual:uno.css' {
+  const css: string
+  export default css
+}
+
+declare module 'virtual:pwa-register' {
+  export function registerSW(options?: {
+    immediate?: boolean
+    onNeedRefresh?: () => void
+    onOfflineReady?: () => void
+    onRegistered?: (registration: ServiceWorkerRegistration | undefined) => void
+    onRegisterError?: (error: Error) => void
+  }): (reloadPage?: boolean) => Promise<void>
+}

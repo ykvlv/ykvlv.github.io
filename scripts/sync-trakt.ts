@@ -4,8 +4,11 @@
  * Fetches movie and episode history from Trakt API,
  * groups consecutive episodes by show+season,
  * and saves to a public Gist.
+ *
+ * Supports automatic token refresh via GitHub Secrets API.
  */
 
+import nacl from 'tweetnacl'
 import type {
   WatchlogItem,
   WatchlogStats,
@@ -29,15 +32,31 @@ const OUTPUT_ITEMS_LIMIT = 20
 
 const {
   TRAKT_CLIENT_ID,
-  TRAKT_ACCESS_TOKEN,
+  TRAKT_CLIENT_SECRET,
+  TRAKT_ACCESS_TOKEN: INITIAL_ACCESS_TOKEN,
+  TRAKT_REFRESH_TOKEN: INITIAL_REFRESH_TOKEN,
   GIST_ID,
-  GH_GIST_TOKEN,
+  GIST_FILENAME,
+  GH_TOKEN,
+  GH_REPOSITORY,
 } = process.env
 
-if (!TRAKT_CLIENT_ID || !TRAKT_ACCESS_TOKEN || !GIST_ID || !GH_GIST_TOKEN) {
+if (
+  !TRAKT_CLIENT_ID ||
+  !TRAKT_CLIENT_SECRET ||
+  !INITIAL_ACCESS_TOKEN ||
+  !INITIAL_REFRESH_TOKEN ||
+  !GIST_ID ||
+  !GIST_FILENAME ||
+  !GH_TOKEN
+) {
   console.error('Missing required environment variables')
   process.exit(1)
 }
+
+// Mutable tokens (may be refreshed)
+let TRAKT_ACCESS_TOKEN = INITIAL_ACCESS_TOKEN
+let TRAKT_REFRESH_TOKEN = INITIAL_REFRESH_TOKEN
 
 // ============================================================================
 // Trakt API Types
@@ -143,21 +162,56 @@ interface RawCalendar {
 // ============================================================================
 
 class TraktClient {
-  private readonly headers: Record<string, string>
+  private clientId: string
+  private token: string
+  private tokenRefreshed = false
 
   constructor(clientId: string, token: string) {
-    this.headers = {
+    this.clientId = clientId
+    this.token = token
+  }
+
+  private getHeaders(): Record<string, string> {
+    return {
       'Content-Type': 'application/json',
       'trakt-api-version': '2',
-      'trakt-api-key': clientId,
-      Authorization: `Bearer ${token}`,
+      'trakt-api-key': this.clientId,
+      Authorization: `Bearer ${this.token}`,
     }
   }
 
+  updateToken(newToken: string): void {
+    this.token = newToken
+  }
+
+  hasRefreshedToken(): boolean {
+    return this.tokenRefreshed
+  }
+
   private async get<T>(endpoint: string): Promise<T> {
-    const response = await fetch(`${TRAKT_API_BASE}${endpoint}`, {
-      headers: this.headers,
+    let response = await fetch(`${TRAKT_API_BASE}${endpoint}`, {
+      headers: this.getHeaders(),
     })
+
+    // Handle 401 - try to refresh token once
+    if (response.status === 401 && !this.tokenRefreshed) {
+      console.log('Received 401, attempting token refresh...')
+      const newTokens = await refreshTraktTokens()
+
+      // Update tokens in memory
+      TRAKT_ACCESS_TOKEN = newTokens.access_token
+      TRAKT_REFRESH_TOKEN = newTokens.refresh_token
+      this.token = newTokens.access_token
+      this.tokenRefreshed = true
+
+      // Update GitHub secrets
+      await updateGitHubTokenSecrets(newTokens)
+
+      // Retry the request
+      response = await fetch(`${TRAKT_API_BASE}${endpoint}`, {
+        headers: this.getHeaders(),
+      })
+    }
 
     if (!response.ok) {
       throw new Error(`Trakt API error: ${response.status} - ${endpoint}`)
@@ -519,12 +573,12 @@ async function updateGist(data: WatchlogData): Promise<void> {
     method: 'PATCH',
     headers: {
       Accept: 'application/vnd.github+json',
-      Authorization: `Bearer ${GH_GIST_TOKEN}`,
+      Authorization: `Bearer ${GH_TOKEN}`,
       'X-GitHub-Api-Version': '2022-11-28',
     },
     body: JSON.stringify({
       files: {
-        'watchlog.json': {
+        [GIST_FILENAME]: {
           content: JSON.stringify(data, null, 2),
         },
       },
@@ -535,6 +589,125 @@ async function updateGist(data: WatchlogData): Promise<void> {
     const body = await response.text()
     throw new Error(`GitHub API error: ${response.status} - ${body}`)
   }
+}
+
+// ============================================================================
+// Token Refresh
+// ============================================================================
+
+interface TraktTokenResponse {
+  access_token: string
+  refresh_token: string
+  expires_in: number
+  created_at: number
+}
+
+async function refreshTraktTokens(): Promise<TraktTokenResponse> {
+  console.log('Refreshing Trakt tokens...')
+
+  const response = await fetch(`${TRAKT_API_BASE}/oauth/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      refresh_token: TRAKT_REFRESH_TOKEN,
+      client_id: TRAKT_CLIENT_ID,
+      client_secret: TRAKT_CLIENT_SECRET,
+      grant_type: 'refresh_token',
+    }),
+  })
+
+  if (!response.ok) {
+    const body = await response.text()
+    throw new Error(
+      `Failed to refresh Trakt token: ${response.status} - ${body}`,
+    )
+  }
+
+  const data: TraktTokenResponse = await response.json()
+  console.log('Trakt tokens refreshed successfully')
+  return data
+}
+
+// ============================================================================
+// GitHub Secrets API
+// ============================================================================
+
+interface GitHubPublicKey {
+  key_id: string
+  key: string
+}
+
+async function getRepoPublicKey(): Promise<GitHubPublicKey> {
+  if (!GH_REPOSITORY) {
+    throw new Error('GH_REPOSITORY required for secrets update')
+  }
+
+  const response = await fetch(
+    `${GITHUB_API_BASE}/repos/${GH_REPOSITORY}/actions/secrets/public-key`,
+    {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${GH_TOKEN}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    },
+  )
+
+  if (!response.ok) {
+    const body = await response.text()
+    throw new Error(`Failed to get public key: ${response.status} - ${body}`)
+  }
+
+  return response.json()
+}
+
+function encryptSecret(secret: string, publicKey: string): string {
+  const keyBytes = Uint8Array.from(atob(publicKey), (c) => c.charCodeAt(0))
+  const secretBytes = new TextEncoder().encode(secret)
+  const encrypted = nacl.box.seal(secretBytes, keyBytes)
+  return btoa(String.fromCharCode(...encrypted))
+}
+
+async function updateGitHubSecret(name: string, value: string): Promise<void> {
+  if (!GH_REPOSITORY) {
+    console.warn(`Skipping ${name} update: GH_REPOSITORY not set`)
+    return
+  }
+
+  const publicKey = await getRepoPublicKey()
+  const encryptedValue = encryptSecret(value, publicKey.key)
+
+  const response = await fetch(
+    `${GITHUB_API_BASE}/repos/${GH_REPOSITORY}/actions/secrets/${name}`,
+    {
+      method: 'PUT',
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${GH_TOKEN}`,
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      body: JSON.stringify({
+        encrypted_value: encryptedValue,
+        key_id: publicKey.key_id,
+      }),
+    },
+  )
+
+  if (!response.ok) {
+    const body = await response.text()
+    throw new Error(
+      `Failed to update secret ${name}: ${response.status} - ${body}`,
+    )
+  }
+
+  console.log(`Updated GitHub secret: ${name}`)
+}
+
+async function updateGitHubTokenSecrets(
+  tokens: TraktTokenResponse,
+): Promise<void> {
+  await updateGitHubSecret('TRAKT_ACCESS_TOKEN', tokens.access_token)
+  await updateGitHubSecret('TRAKT_REFRESH_TOKEN', tokens.refresh_token)
 }
 
 // ============================================================================

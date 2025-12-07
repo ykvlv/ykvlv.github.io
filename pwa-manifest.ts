@@ -6,8 +6,8 @@ export const manifest: Partial<ManifestOptions> = {
   start_url: '/',
   id: '/',
   description: 'personal website',
-  theme_color: '#818CF8',
-  background_color: '#818CF8',
+  theme_color: '#F7F5F2',
+  background_color: '#F7F5F2',
   orientation: 'any',
   display: 'standalone',
   icons: [

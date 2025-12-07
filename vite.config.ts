@@ -8,6 +8,7 @@ import { manifest } from './pwa-manifest.ts'
 // https://vite.dev/config/
 export default defineConfig({
   base: '/',
+  envPrefix: ['VITE_', 'GIST_'],
   plugins: [
     UnoCSS(),
     react(),
