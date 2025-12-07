@@ -23,17 +23,20 @@ function getStoredTheme(): Theme {
 function applyTheme(theme: Theme) {
   const root = document.documentElement
   const effectiveTheme = theme === 'system' ? getSystemTheme() : theme
+  // colors must match index.html inline script
+  const bg = effectiveTheme === 'dark' ? '#0A0E14' : '#F7F5F2'
 
   root.classList.remove('light', 'dark')
   root.classList.add(effectiveTheme)
 
+  // Update background color (overrides inline style from index.html)
+  root.style.backgroundColor = bg
+  document.body.style.backgroundColor = bg
+
   // Update meta theme-color for PWA
   const metaThemeColor = document.querySelector('meta[name="theme-color"]')
   if (metaThemeColor) {
-    metaThemeColor.setAttribute(
-      'content',
-      effectiveTheme === 'dark' ? '#0A0E14' : '#F7F5F2',
-    )
+    metaThemeColor.setAttribute('content', bg)
   }
 }
 

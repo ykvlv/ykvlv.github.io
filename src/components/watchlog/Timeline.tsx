@@ -40,15 +40,58 @@ export function Timeline({ items }: TimelineProps) {
     setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 10)
   }, [])
 
-  const syncTimelineScroll = useCallback(() => {
-    if (cardsRef.current && timelineRef.current) {
-      timelineRef.current.scrollLeft = cardsRef.current.scrollLeft
+  // Jelly effect: timeline lags behind cards
+  const targetScrollRef = useRef(0)
+  const currentScrollRef = useRef(0)
+  const animationRef = useRef<number | null>(null)
+
+  // Controls jelly effect smoothness (lower = more delay)
+  const LERP_FACTOR = 0.15
+  const prefersReducedMotion =
+    typeof window !== 'undefined' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+  const animateTimelineScroll = useCallback(() => {
+    if (!timelineRef.current) return
+
+    // Skip animation for users who prefer reduced motion
+    if (prefersReducedMotion) {
+      timelineRef.current.scrollLeft = targetScrollRef.current
+      currentScrollRef.current = targetScrollRef.current
+      animationRef.current = null
+      return
     }
-  }, [])
+
+    const diff = targetScrollRef.current - currentScrollRef.current
+    if (Math.abs(diff) < 0.5) {
+      currentScrollRef.current = targetScrollRef.current
+      timelineRef.current.scrollLeft = targetScrollRef.current
+      animationRef.current = null
+      return
+    }
+
+    currentScrollRef.current += diff * LERP_FACTOR
+    timelineRef.current.scrollLeft = currentScrollRef.current
+    animationRef.current = requestAnimationFrame(animateTimelineScroll)
+  }, [prefersReducedMotion])
+
+  const syncTimelineScroll = useCallback(() => {
+    if (!cardsRef.current) return
+    targetScrollRef.current = cardsRef.current.scrollLeft
+
+    if (!animationRef.current) {
+      animationRef.current = requestAnimationFrame(animateTimelineScroll)
+    }
+  }, [animateTimelineScroll])
 
   useEffect(() => {
-    updateScrollButtons()
     const ref = cardsRef.current
+    // Initialize scroll position refs
+    if (ref) {
+      currentScrollRef.current = ref.scrollLeft
+      targetScrollRef.current = ref.scrollLeft
+    }
+    updateScrollButtons()
     const handleScroll = () => {
       updateScrollButtons()
       syncTimelineScroll()
@@ -58,6 +101,7 @@ export function Timeline({ items }: TimelineProps) {
     return () => {
       ref?.removeEventListener('scroll', handleScroll)
       window.removeEventListener('resize', updateScrollButtons)
+      if (animationRef.current) cancelAnimationFrame(animationRef.current)
     }
   }, [updateScrollButtons, syncTimelineScroll])
 
@@ -205,7 +249,7 @@ function TimelineSegment({ date, itemCount, isLast }: TimelineSegmentProps) {
       </span>
 
       {/* Connecting line to next group */}
-      {!isLast && <div className="flex-1 h-px bg-border ml-4 min-w-8" />}
+      {!isLast && <div className="flex-1 h-px bg-border ml-3 min-w-8" />}
     </div>
   )
 }

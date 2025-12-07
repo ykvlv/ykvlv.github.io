@@ -19,10 +19,13 @@
             : window.matchMedia('(prefers-color-scheme: dark)').matches
               ? 'dark'
               : 'light'
+        // colors must match src/hooks/useTheme.ts
+        var bg = theme === 'dark' ? '#0A0E14' : '#F7F5F2'
         document.documentElement.classList.add(theme)
+        document.documentElement.style.backgroundColor = bg
+        document.body.style.backgroundColor = bg
         var meta = document.querySelector('meta[name="theme-color"]')
-        if (meta)
-          meta.setAttribute('content', theme === 'dark' ? '#0A0E14' : '#F7F5F2')
+        if (meta) meta.setAttribute('content', bg)
       })()
     </script>
     <div id="root"></div>
