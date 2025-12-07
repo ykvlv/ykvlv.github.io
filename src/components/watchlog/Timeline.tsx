@@ -1,6 +1,13 @@
-import { useRef, useState, useEffect, useCallback } from 'react'
+import { useRef, useState, useEffect, useCallback, useMemo } from 'react'
 import type { CalendarItem } from '@/types/watchlog'
 import { cn } from '@/lib/utils'
+
+// Layout constants (must match Tailwind classes)
+const CARD_WIDTH_PX = 144 // w-36
+const GAP_PX = 12 // gap-3
+const SCROLL_BUFFER = 10
+const SCROLL_FACTOR = 0.8
+const LERP_FACTOR = 0.15 // Controls jelly effect smoothness (lower = more delay)
 
 interface TimelineProps {
   items: CalendarItem[]
@@ -37,7 +44,7 @@ export function Timeline({ items }: TimelineProps) {
     const { scrollLeft, scrollWidth, clientWidth } = cardsRef.current
     setNeedsScroll(scrollWidth > clientWidth)
     setCanScrollLeft(scrollLeft > 0)
-    setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 10)
+    setCanScrollRight(scrollLeft < scrollWidth - clientWidth - SCROLL_BUFFER)
   }, [])
 
   // Jelly effect: timeline lags behind cards
@@ -45,17 +52,19 @@ export function Timeline({ items }: TimelineProps) {
   const currentScrollRef = useRef(0)
   const animationRef = useRef<number | null>(null)
 
-  // Controls jelly effect smoothness (lower = more delay)
-  const LERP_FACTOR = 0.15
-  const prefersReducedMotion =
-    typeof window !== 'undefined' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
-
   const animateTimelineScroll = useCallback(() => {
     if (!timelineRef.current) return
 
+    // Check reduced motion preference inside callback for reactivity
+    const prefersReducedMotion = window.matchMedia(
+      '(prefers-reduced-motion: reduce)',
+    ).matches
+
     // Skip animation for users who prefer reduced motion
     if (prefersReducedMotion) {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current)
+      }
       timelineRef.current.scrollLeft = targetScrollRef.current
       currentScrollRef.current = targetScrollRef.current
       animationRef.current = null
@@ -73,7 +82,7 @@ export function Timeline({ items }: TimelineProps) {
     currentScrollRef.current += diff * LERP_FACTOR
     timelineRef.current.scrollLeft = currentScrollRef.current
     animationRef.current = requestAnimationFrame(animateTimelineScroll)
-  }, [prefersReducedMotion])
+  }, [])
 
   const syncTimelineScroll = useCallback(() => {
     if (!cardsRef.current) return
@@ -105,17 +114,17 @@ export function Timeline({ items }: TimelineProps) {
     }
   }, [updateScrollButtons, syncTimelineScroll])
 
-  const scroll = (direction: 'left' | 'right') => {
+  const scroll = useCallback((direction: 'left' | 'right') => {
     if (!cardsRef.current) return
-    const scrollAmount = cardsRef.current.clientWidth * 0.8
+    const scrollAmount = cardsRef.current.clientWidth * SCROLL_FACTOR
     cardsRef.current.scrollBy({
       left: direction === 'left' ? -scrollAmount : scrollAmount,
       behavior: 'smooth',
     })
-  }
+  }, [])
 
-  const grouped = groupByDate(items)
-  const sortedDates = Object.keys(grouped).sort()
+  const grouped = useMemo(() => groupByDate(items), [items])
+  const sortedDates = useMemo(() => Object.keys(grouped).sort(), [grouped])
 
   if (items.length === 0) {
     return (
@@ -134,15 +143,17 @@ export function Timeline({ items }: TimelineProps) {
           <button
             onClick={() => scroll('left')}
             disabled={!canScrollLeft}
+            tabIndex={canScrollLeft ? 0 : -1}
+            aria-hidden={!canScrollLeft}
             className={cn(
               'absolute left-3 top-1/2 -translate-y-1/2 z-10',
               'w-10 h-10 flex items-center justify-center',
               'rounded-full bg-background/90 border border-border shadow-lg',
               'transition-all duration-200',
-              'hover:bg-secondary hover:border-primary/30',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-              'disabled:opacity-0 disabled:pointer-events-none',
-              'opacity-0 group-hover/scroll:opacity-100',
+              canScrollLeft
+                ? 'opacity-0 group-hover/scroll:opacity-100 hover:bg-secondary hover:border-primary/30'
+                : 'opacity-0 pointer-events-none',
             )}
             aria-label="Scroll left"
           >
@@ -151,16 +162,12 @@ export function Timeline({ items }: TimelineProps) {
         )}
 
         {/* Scrollable cards */}
-        <div
-          ref={cardsRef}
-          className="overflow-x-auto scrollbar-hide"
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-        >
+        <div ref={cardsRef} className="overflow-x-auto scrollbar-none">
           <div className="flex gap-3 min-w-max py-2">
             {sortedDates.map((date) => (
               <div key={date} className="flex gap-3">
-                {grouped[date].map((item, idx) => (
-                  <TimelineCard key={`${item.title}-${idx}`} item={item} />
+                {grouped[date].map((item) => (
+                  <TimelineCard key={item.trakt_url} item={item} />
                 ))}
               </div>
             ))}
@@ -172,15 +179,17 @@ export function Timeline({ items }: TimelineProps) {
           <button
             onClick={() => scroll('right')}
             disabled={!canScrollRight}
+            tabIndex={canScrollRight ? 0 : -1}
+            aria-hidden={!canScrollRight}
             className={cn(
               'absolute right-3 top-1/2 -translate-y-1/2 z-10',
               'w-10 h-10 flex items-center justify-center',
               'rounded-full bg-background/90 border border-border shadow-lg',
               'transition-all duration-200',
-              'hover:bg-secondary hover:border-primary/30',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-              'disabled:opacity-0 disabled:pointer-events-none',
-              'opacity-0 group-hover/scroll:opacity-100',
+              canScrollRight
+                ? 'opacity-0 group-hover/scroll:opacity-100 hover:bg-secondary hover:border-primary/30'
+                : 'opacity-0 pointer-events-none',
             )}
             aria-label="Scroll right"
           >
@@ -190,11 +199,7 @@ export function Timeline({ items }: TimelineProps) {
       </div>
 
       {/* Timeline - synced scroll with cards */}
-      <div
-        ref={timelineRef}
-        className="overflow-x-hidden mt-4"
-        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-      >
+      <div ref={timelineRef} className="overflow-x-hidden mt-4">
         <div className="flex gap-3 min-w-max">
           {sortedDates.map((date, idx) => (
             <TimelineSegment
@@ -217,26 +222,30 @@ interface TimelineSegmentProps {
 }
 
 function TimelineSegment({ date, itemCount, isLast }: TimelineSegmentProps) {
-  const localDate = parseLocalDate(date)
-  const formattedDate = localDate.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-  })
+  const localDate = useMemo(() => parseLocalDate(date), [date])
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const isToday = localDate.getTime() === today.getTime()
+  const formattedDate = useMemo(
+    () =>
+      localDate.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      }),
+    [localDate],
+  )
+
+  const isToday = useMemo(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    return localDate.getTime() === today.getTime()
+  }, [localDate])
 
   // Width matches cards above: itemCount * cardWidth + (itemCount - 1) * gap
-  // Card: w-36 = 144px, gap-3 = 12px
-  const segmentWidth = itemCount * 144 + (itemCount - 1) * 12
+  const segmentWidth = itemCount * CARD_WIDTH_PX + (itemCount - 1) * GAP_PX
 
   return (
     <div className="flex items-center" style={{ width: `${segmentWidth}px` }}>
       {/* Dot */}
-      <div
-        className={cn('w-2.5 h-2.5 rounded-full flex-shrink-0', 'bg-primary')}
-      />
+      <div className="w-2.5 h-2.5 rounded-full flex-shrink-0 bg-primary" />
 
       {/* Date label */}
       <span
