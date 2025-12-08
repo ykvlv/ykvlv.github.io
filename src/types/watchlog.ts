@@ -15,6 +15,15 @@ export interface WatchlogStats {
   total_hours: number
 }
 
+export type EpisodeType =
+  | 'standard'
+  | 'series_premiere'
+  | 'season_premiere'
+  | 'mid_season_premiere'
+  | 'mid_season_finale'
+  | 'season_finale'
+  | 'series_finale'
+
 export interface CalendarItem {
   type: 'episode' | 'season' | 'movie'
   title: string
@@ -22,6 +31,7 @@ export interface CalendarItem {
   date: string
   poster?: string
   trakt_url: string
+  episode_type?: EpisodeType
 }
 
 export interface WatchlogData {

@@ -21,8 +21,11 @@
   --accent: 239 84% 95%;
   --accent-foreground: 239 84% 50%;
 
-  --destructive: 0 84% 60%;
+  --destructive: 0 70% 50%;
   --destructive-foreground: 0 0% 100%;
+
+  --success: 150 70% 40%;
+  --success-foreground: 0 0% 100%;
 
   --border: 45 15% 88%;
   --input: 45 15% 88%;
@@ -53,8 +56,11 @@
   --accent: 239 50% 20%;
   --accent-foreground: 239 84% 80%;
 
-  --destructive: 0 62% 50%;
+  --destructive: 0 55% 45%;
   --destructive-foreground: 0 0% 100%;
+
+  --success: 150 55% 35%;
+  --success-foreground: 0 0% 100%;
 
   --border: 222 20% 20%;
   --input: 222 20% 20%;

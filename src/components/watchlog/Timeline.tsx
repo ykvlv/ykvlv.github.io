@@ -233,12 +233,6 @@ function TimelineSegment({ date, itemCount, isLast }: TimelineSegmentProps) {
     [localDate],
   )
 
-  const isToday = useMemo(() => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    return localDate.getTime() === today.getTime()
-  }, [localDate])
-
   // Width matches cards above: itemCount * cardWidth + (itemCount - 1) * gap
   const segmentWidth = itemCount * CARD_WIDTH_PX + (itemCount - 1) * GAP_PX
 
@@ -248,13 +242,8 @@ function TimelineSegment({ date, itemCount, isLast }: TimelineSegmentProps) {
       <div className="w-2.5 h-2.5 rounded-full flex-shrink-0 bg-primary" />
 
       {/* Date label */}
-      <span
-        className={cn(
-          'text-sm font-medium ml-2 whitespace-nowrap',
-          isToday ? 'text-primary' : 'text-muted-foreground',
-        )}
-      >
-        {isToday ? 'Today' : formattedDate}
+      <span className="text-sm font-medium ml-2 whitespace-nowrap text-muted-foreground">
+        {formattedDate}
       </span>
 
       {/* Connecting line to next group */}
@@ -263,7 +252,18 @@ function TimelineSegment({ date, itemCount, isLast }: TimelineSegmentProps) {
   )
 }
 
+const EPISODE_TYPE_LABELS: Record<string, string> = {
+  series_premiere: 'New Series',
+  season_premiere: 'Season Premiere',
+  mid_season_premiere: 'Mid-Premiere',
+  mid_season_finale: 'Mid-Finale',
+  season_finale: 'Season Finale',
+  series_finale: 'The End',
+}
+
 function TimelineCard({ item }: { item: CalendarItem }) {
+  const badgeLabel = item.episode_type && EPISODE_TYPE_LABELS[item.episode_type]
+
   return (
     <a
       href={item.trakt_url}
@@ -277,7 +277,7 @@ function TimelineCard({ item }: { item: CalendarItem }) {
       )}
     >
       {/* Poster */}
-      <div className="aspect-[2/3] bg-muted overflow-hidden">
+      <div className="aspect-[2/3] bg-muted overflow-hidden relative">
         {item.poster ? (
           <img
             src={item.poster}
@@ -288,6 +288,20 @@ function TimelineCard({ item }: { item: CalendarItem }) {
         ) : (
           <div className="w-full h-full flex items-center justify-center">
             <span className="i-lucide-image-off size-8 text-muted-foreground" />
+          </div>
+        )}
+        {badgeLabel && (
+          <div
+            className={cn(
+              'absolute top-2 right-2 px-2 py-1 rounded text-white text-xs font-medium',
+              item.episode_type?.includes('finale')
+                ? 'bg-destructive/70'
+                : item.episode_type?.includes('premiere')
+                  ? 'bg-success/70'
+                  : 'bg-black/70',
+            )}
+          >
+            {badgeLabel}
           </div>
         )}
       </div>

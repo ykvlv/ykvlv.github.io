@@ -14,6 +14,7 @@ import type {
   WatchlogStats,
   CalendarItem,
   WatchlogData,
+  EpisodeType,
 } from '../src/types/watchlog'
 
 // ============================================================================
@@ -121,7 +122,7 @@ interface TraktStats {
 
 interface TraktCalendarEpisode {
   first_aired: string
-  episode: { season: number; number: number }
+  episode: { season: number; number: number; episode_type: EpisodeType }
   show: TraktShow
 }
 
@@ -295,7 +296,7 @@ class TraktClient {
 
     const [episodes, movies] = await Promise.all([
       this.get<TraktCalendarEpisode[]>(
-        `/calendars/my/shows/${today}/${CALENDAR_DAYS}?extended=images`,
+        `/calendars/my/shows/${today}/${CALENDAR_DAYS}?extended=full,images`,
       ),
       this.get<TraktCalendarMovie[]>(
         `/calendars/my/movies/${today}/${CALENDAR_DAYS}?extended=images`,
@@ -474,6 +475,18 @@ interface GroupedCalendarEpisode {
   season: number
   date: string
   episodes: number[]
+  episode_type: EpisodeType
+}
+
+// Priority for episode types (higher = more important to show)
+const EPISODE_TYPE_PRIORITY: Record<EpisodeType, number> = {
+  series_finale: 6,
+  season_finale: 5,
+  mid_season_finale: 4,
+  series_premiere: 3,
+  season_premiere: 2,
+  mid_season_premiere: 1,
+  standard: 0,
 }
 
 function groupCalendarEpisodes(
@@ -484,16 +497,25 @@ function groupCalendarEpisodes(
   for (const ep of episodes) {
     const date = toDateString(ep.first_aired)
     const key = `${date}|${ep.show.ids.slug}|${ep.episode.season}`
+    const epType = ep.episode.episode_type
 
     const existing = groups.get(key)
     if (existing) {
       existing.episodes.push(ep.episode.number)
+      // Keep the most significant episode type
+      if (
+        EPISODE_TYPE_PRIORITY[epType] >
+        EPISODE_TYPE_PRIORITY[existing.episode_type]
+      ) {
+        existing.episode_type = epType
+      }
     } else {
       groups.set(key, {
         show: ep.show,
         season: ep.episode.season,
         date,
         episodes: [ep.episode.number],
+        episode_type: epType,
       })
     }
   }
@@ -547,6 +569,7 @@ function enrichCalendar(
         date: group.date,
         ...(poster && { poster }),
         trakt_url,
+        episode_type: group.episode_type,
       }
     }),
     ...rawCalendar.movies.map((m): CalendarItem => {
