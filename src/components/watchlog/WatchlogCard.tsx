@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { WatchlogItem } from '@/types/watchlog'
 import { cn } from '@/lib/utils'
 
@@ -30,6 +31,7 @@ function getTypeIcon(type: WatchlogItem['type']): string {
 }
 
 export function WatchlogCard({ item }: WatchlogCardProps) {
+  const [imgError, setImgError] = useState(false)
   const relativeTime = formatRelativeTime(item.watched_at)
   const typeIcon = getTypeIcon(item.type)
 
@@ -47,12 +49,13 @@ export function WatchlogCard({ item }: WatchlogCardProps) {
     >
       {/* Poster with rating badge */}
       <div className="relative aspect-[2/3] bg-muted overflow-hidden">
-        {item.poster ? (
+        {item.poster && !imgError ? (
           <img
             src={item.poster}
             alt={item.title}
             className="w-full h-full object-cover"
             loading="lazy"
+            onError={() => setImgError(true)}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">

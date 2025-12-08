@@ -63,8 +63,8 @@ export default function Watchlog() {
             </div>
           ) : (
             <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              {data?.items.map((item) => (
-                <WatchlogCard key={item.trakt_url} item={item} />
+              {data?.items.map((item, index) => (
+                <WatchlogCard key={index} item={item} />
               ))}
             </div>
           )}

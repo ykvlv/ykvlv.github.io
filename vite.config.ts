@@ -39,6 +39,17 @@ export default defineConfig({
               },
             },
           },
+          {
+            urlPattern: /^https:\/\/.*\.trakt\.tv\/images\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'trakt-images',
+              expiration: {
+                maxEntries: 200,
+                maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+              },
+            },
+          },
         ],
       },
       manifest: manifest,

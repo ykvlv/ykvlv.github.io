@@ -166,8 +166,8 @@ export function Timeline({ items }: TimelineProps) {
           <div className="flex gap-3 min-w-max pt-2 pb-6">
             {sortedDates.map((date) => (
               <div key={date} className="flex gap-3">
-                {grouped[date].map((item) => (
-                  <TimelineCard key={item.trakt_url} item={item} />
+                {grouped[date].map((item, index) => (
+                  <TimelineCard key={index} item={item} />
                 ))}
               </div>
             ))}
@@ -260,6 +260,7 @@ const EPISODE_TYPE_LABELS: Record<string, string> = {
 }
 
 function TimelineCard({ item }: { item: CalendarItem }) {
+  const [imgError, setImgError] = useState(false)
   const badgeLabel = item.episode_type && EPISODE_TYPE_LABELS[item.episode_type]
 
   return (
@@ -276,12 +277,13 @@ function TimelineCard({ item }: { item: CalendarItem }) {
     >
       {/* Poster */}
       <div className="aspect-[2/3] bg-muted overflow-hidden relative">
-        {item.poster ? (
+        {item.poster && !imgError ? (
           <img
             src={item.poster}
             alt={item.title}
             className="w-full h-full object-cover"
             loading="lazy"
+            onError={() => setImgError(true)}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
