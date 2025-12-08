@@ -15,7 +15,6 @@ export function Header() {
         </Link>
 
         <nav className="flex items-center gap-1" aria-label="Main navigation">
-          <NavItem to="/">Home</NavItem>
           <NavItem to="/watchlog">Watchlog</NavItem>
           <ThemeToggle className="ml-2" />
         </nav>
@@ -30,7 +29,7 @@ function NavItem({ to, children }: { to: string; children: React.ReactNode }) {
       to={to}
       className={({ isActive }) =>
         cn(
-          'px-3 py-2 text-sm font-medium rounded-md transition-colors',
+          'px-3 py-2.5 text-sm font-medium rounded-xl transition-colors',
           'hover:bg-secondary hover:text-foreground',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           isActive ? 'text-foreground bg-secondary' : 'text-muted-foreground',

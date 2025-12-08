@@ -50,13 +50,13 @@ export default function Watchlog() {
               {Array.from({ length: 10 }).map((_, i) => (
                 <div
                   key={i}
-                  className="rounded-lg border border-border overflow-hidden"
+                  className="rounded-2xl border border-border overflow-hidden"
                 >
-                  <Skeleton className="aspect-[2/3]" />
+                  <Skeleton className="aspect-[2/3] rounded-none" />
                   <div className="p-3">
-                    <Skeleton className="h-5 w-3/4 mb-2" />
-                    <Skeleton className="h-4 w-1/2 mb-2" />
-                    <Skeleton className="h-3 w-1/3" />
+                    <Skeleton className="h-5 w-3/4 mb-2 rounded-full" />
+                    <Skeleton className="h-4 w-1/2 mb-2 rounded-full" />
+                    <Skeleton className="h-3 w-1/3 rounded-full" />
                   </div>
                 </div>
               ))}
@@ -79,9 +79,9 @@ export default function Watchlog() {
             <div className="flex gap-4 overflow-hidden">
               {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="flex-shrink-0 w-36">
-                  <Skeleton className="aspect-[2/3] rounded-lg mb-3" />
-                  <Skeleton className="h-4 w-3/4 mb-2" />
-                  <Skeleton className="h-3 w-1/2" />
+                  <Skeleton className="aspect-[2/3] rounded-2xl mb-3" />
+                  <Skeleton className="h-4 w-3/4 mb-2 rounded-full" />
+                  <Skeleton className="h-3 w-1/2 rounded-full" />
                 </div>
               ))}
             </div>

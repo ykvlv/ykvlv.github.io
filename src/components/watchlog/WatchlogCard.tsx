@@ -39,7 +39,7 @@ export function WatchlogCard({ item }: WatchlogCardProps) {
       target="_blank"
       rel="noopener noreferrer"
       className={cn(
-        'group block rounded-lg overflow-hidden border border-border bg-card',
+        'group block rounded-2xl overflow-hidden border border-border bg-card',
         'transition-all duration-200',
         'card-hover',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
@@ -62,7 +62,7 @@ export function WatchlogCard({ item }: WatchlogCardProps) {
 
         {/* Rating badge */}
         {item.rating && (
-          <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded bg-black/70 text-white text-xs font-medium">
+          <div className="absolute top-2 right-2 flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-sm text-white text-xs font-medium">
             ★ {item.rating}
           </div>
         )}

@@ -17,7 +17,7 @@ export function ProjectCard({
   external = false,
 }: ProjectCardProps) {
   const cardClasses = cn(
-    'group block p-6 rounded-lg border border-border bg-card',
+    'group block p-6 rounded-2xl border border-border bg-card',
     'transition-all duration-200',
     'card-hover',
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',

@@ -32,13 +32,13 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
     <button
       onClick={cycleTheme}
       className={cn(
-        'p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors',
+        'p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         className,
       )}
       aria-label={label}
     >
-      <span className={cn(icon, 'size-5')} />
+      <span className={cn(icon, 'size-5 -translate-y-px')} />
     </button>
   )
 }

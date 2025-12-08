@@ -148,7 +148,7 @@ export function Timeline({ items }: TimelineProps) {
             className={cn(
               'absolute left-3 top-1/2 -translate-y-1/2 z-10',
               'w-10 h-10 flex items-center justify-center',
-              'rounded-full bg-background/90 border border-border shadow-lg',
+              'rounded-full bg-background/80 backdrop-blur-sm border border-border shadow-lg',
               'transition-all duration-200',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
               canScrollLeft
@@ -162,8 +162,8 @@ export function Timeline({ items }: TimelineProps) {
         )}
 
         {/* Scrollable cards */}
-        <div ref={cardsRef} className="overflow-x-auto scrollbar-none">
-          <div className="flex gap-3 min-w-max py-2">
+        <div ref={cardsRef} className="overflow-x-auto scrollbar-none -mb-4">
+          <div className="flex gap-3 min-w-max pt-2 pb-6">
             {sortedDates.map((date) => (
               <div key={date} className="flex gap-3">
                 {grouped[date].map((item) => (
@@ -184,7 +184,7 @@ export function Timeline({ items }: TimelineProps) {
             className={cn(
               'absolute right-3 top-1/2 -translate-y-1/2 z-10',
               'w-10 h-10 flex items-center justify-center',
-              'rounded-full bg-background/90 border border-border shadow-lg',
+              'rounded-full bg-background/80 backdrop-blur-sm border border-border shadow-lg',
               'transition-all duration-200',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
               canScrollRight
@@ -201,12 +201,11 @@ export function Timeline({ items }: TimelineProps) {
       {/* Timeline - synced scroll with cards */}
       <div ref={timelineRef} className="overflow-x-hidden mt-4">
         <div className="flex gap-3 min-w-max">
-          {sortedDates.map((date, idx) => (
+          {sortedDates.map((date) => (
             <TimelineSegment
               key={date}
               date={date}
               itemCount={grouped[date].length}
-              isLast={idx === sortedDates.length - 1}
             />
           ))}
         </div>
@@ -218,10 +217,9 @@ export function Timeline({ items }: TimelineProps) {
 interface TimelineSegmentProps {
   date: string
   itemCount: number
-  isLast: boolean
 }
 
-function TimelineSegment({ date, itemCount, isLast }: TimelineSegmentProps) {
+function TimelineSegment({ date, itemCount }: TimelineSegmentProps) {
   const localDate = useMemo(() => parseLocalDate(date), [date])
 
   const formattedDate = useMemo(
@@ -246,8 +244,8 @@ function TimelineSegment({ date, itemCount, isLast }: TimelineSegmentProps) {
         {formattedDate}
       </span>
 
-      {/* Connecting line to next group */}
-      {!isLast && <div className="flex-1 h-px bg-border ml-3 min-w-8" />}
+      {/* Connecting line */}
+      <div className="flex-1 h-px bg-border ml-3 min-w-8" />
     </div>
   )
 }
@@ -270,7 +268,7 @@ function TimelineCard({ item }: { item: CalendarItem }) {
       target="_blank"
       rel="noopener noreferrer"
       className={cn(
-        'group block w-36 rounded-lg overflow-hidden border border-border bg-card',
+        'group block w-36 rounded-2xl overflow-hidden border border-border bg-card',
         'transition-all duration-200',
         'card-hover',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
@@ -293,12 +291,12 @@ function TimelineCard({ item }: { item: CalendarItem }) {
         {badgeLabel && (
           <div
             className={cn(
-              'absolute top-2 right-2 px-2 py-1 rounded text-white text-xs font-medium',
+              'absolute top-2 right-2 px-2.5 py-1 rounded-full backdrop-blur-sm text-white text-xs font-medium',
               item.episode_type?.includes('finale')
-                ? 'bg-destructive/70'
+                ? 'bg-destructive/60'
                 : item.episode_type?.includes('premiere')
-                  ? 'bg-success/70'
-                  : 'bg-black/70',
+                  ? 'bg-success/60'
+                  : 'bg-black/60',
             )}
           >
             {badgeLabel}

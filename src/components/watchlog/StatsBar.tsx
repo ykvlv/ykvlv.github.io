@@ -43,7 +43,7 @@ function StatCard({
   icon: string
 }) {
   return (
-    <div className="p-4 sm:p-6 rounded-lg border border-border bg-card text-center">
+    <div className="p-4 sm:p-6 rounded-2xl border border-border bg-card text-center">
       <span className={`${icon} size-5 text-primary mx-auto mb-2`} />
       {isLoading ? (
         <Skeleton className="h-8 w-16 mx-auto mb-1" />

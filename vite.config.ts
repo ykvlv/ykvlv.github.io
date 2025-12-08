@@ -27,6 +27,19 @@ export default defineConfig({
       registerType: 'autoUpdate',
       workbox: {
         globPatterns: ['**/*.{js,css,html,png,svg}'],
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/gist\.githubusercontent\.com\/.*/i,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'gist-cache',
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
+              },
+            },
+          },
+        ],
       },
       manifest: manifest,
     }),
