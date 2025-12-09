@@ -72,11 +72,12 @@ export default function Watchlog() {
 
         {/* My Premieres Timeline */}
         <section className="mb-16">
-          <h2 className="font-serif text-2xl font-medium text-foreground mb-6">
+          {/* mb-2. not mb-6 because the timeline has pt-4 on cards */}
+          <h2 className="font-serif text-2xl font-medium text-foreground mb-2">
             My Premieres
           </h2>
           {isLoading ? (
-            <div className="flex gap-4 overflow-hidden">
+            <div className="flex gap-4 overflow-hidden mt-4">
               {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="flex-shrink-0 w-36">
                   <Skeleton className="aspect-[2/3] rounded-2xl mb-3" />

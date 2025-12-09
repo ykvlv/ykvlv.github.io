@@ -136,7 +136,7 @@ export function Timeline({ items }: TimelineProps) {
 
   return (
     <div className="group/scroll">
-      {/* Cards section with buttons centered on it */}
+      {/* Cards section with buttons centered on cards only */}
       <div className="relative">
         {/* Left scroll button */}
         {needsScroll && (
@@ -161,19 +161,6 @@ export function Timeline({ items }: TimelineProps) {
           </button>
         )}
 
-        {/* Scrollable cards */}
-        <div ref={cardsRef} className="overflow-x-auto scrollbar-none -mb-4">
-          <div className="flex gap-3 min-w-max pt-2 pb-6">
-            {sortedDates.map((date) => (
-              <div key={date} className="flex gap-3">
-                {grouped[date].map((item, index) => (
-                  <TimelineCard key={index} item={item} />
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-
         {/* Right scroll button */}
         {needsScroll && (
           <button
@@ -196,10 +183,24 @@ export function Timeline({ items }: TimelineProps) {
             <span className="i-lucide-chevron-right size-5" />
           </button>
         )}
+
+        {/* Scrollable cards */}
+        <div ref={cardsRef} className="overflow-x-auto scrollbar-none">
+          {/* py-4 for the shadow at the bottom and card can move up. not pb-4 pt-2 to keep the buttons centered */}
+          <div className="flex gap-3 min-w-max py-4">
+            {sortedDates.map((date) => (
+              <div key={date} className="flex gap-3">
+                {grouped[date].map((item, index) => (
+                  <TimelineCard key={index} item={item} />
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Timeline - synced scroll with cards */}
-      <div ref={timelineRef} className="overflow-x-hidden mt-4">
+      <div ref={timelineRef} className="overflow-x-hidden">
         <div className="flex gap-3 min-w-max">
           {sortedDates.map((date) => (
             <TimelineSegment
