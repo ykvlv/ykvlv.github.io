@@ -72,7 +72,7 @@ export default defineConfig({
     'focus-ring':
       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
     'card-hover':
-      'hover:border-primary/30 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1',
+      'hover:border-primary/30 hover:shadow-lg hover:shadow-primary/10',
   },
   safelist: ['animate-in', 'fade-in', 'slide-in-from-bottom-4'],
 })

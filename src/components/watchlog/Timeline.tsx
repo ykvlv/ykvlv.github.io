@@ -186,7 +186,7 @@ export function Timeline({ items }: TimelineProps) {
 
         {/* Scrollable cards */}
         <div ref={cardsRef} className="overflow-x-auto scrollbar-none">
-          {/* py-4 for the shadow at the bottom and card can move up. not pb-4 pt-2 to keep the buttons centered */}
+          {/* py-4 for the shadow at the bottom. not pb-4 to keep the timeline buttons centered */}
           <div className="flex gap-3 min-w-max py-4">
             {sortedDates.map((date) => (
               <div key={date} className="flex gap-3">

@@ -84,6 +84,10 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+.font-serif {
+  font-family: 'Lora', Georgia, serif;
+}
+
 ::selection {
   background-color: hsl(var(--primary) / 0.2);
 }

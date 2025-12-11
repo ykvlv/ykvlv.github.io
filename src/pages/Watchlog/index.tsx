@@ -72,7 +72,7 @@ export default function Watchlog() {
 
         {/* My Premieres Timeline */}
         <section className="mb-16">
-          {/* mb-2. not mb-6 because the timeline has pt-4 on cards */}
+          {/* mb-2. not mb-6 because the timeline has py-4 on cards */}
           <h2 className="font-serif text-2xl font-medium text-foreground mb-2">
             My Premieres
           </h2>
