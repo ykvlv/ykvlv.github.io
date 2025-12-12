@@ -1,5 +1,5 @@
-import { useRef, useState, useEffect, useCallback, useMemo } from 'react'
-import type { CalendarItem } from '@/types/watchlog'
+import { useRef, useState, useEffect, useCallback, useMemo, memo } from 'react'
+import type { CalendarItem, EpisodeType } from '@/types/watchlog'
 import { cn } from '@/lib/utils'
 
 // Layout constants (must match Tailwind classes)
@@ -35,16 +35,20 @@ function parseLocalDate(dateStr: string): Date {
 export function Timeline({ items }: TimelineProps) {
   const cardsRef = useRef<HTMLDivElement>(null)
   const timelineRef = useRef<HTMLDivElement>(null)
-  const [canScrollLeft, setCanScrollLeft] = useState(false)
-  const [canScrollRight, setCanScrollRight] = useState(false)
-  const [needsScroll, setNeedsScroll] = useState(false)
+  const [scrollState, setScrollState] = useState({
+    canLeft: false,
+    canRight: false,
+    needsScroll: false,
+  })
 
   const updateScrollButtons = useCallback(() => {
     if (!cardsRef.current) return
     const { scrollLeft, scrollWidth, clientWidth } = cardsRef.current
-    setNeedsScroll(scrollWidth > clientWidth)
-    setCanScrollLeft(scrollLeft > 0)
-    setCanScrollRight(scrollLeft < scrollWidth - clientWidth - SCROLL_BUFFER)
+    setScrollState({
+      needsScroll: scrollWidth > clientWidth,
+      canLeft: scrollLeft > 0,
+      canRight: scrollLeft < scrollWidth - clientWidth - SCROLL_BUFFER,
+    })
   }, [])
 
   // Jelly effect: timeline lags behind cards
@@ -54,22 +58,6 @@ export function Timeline({ items }: TimelineProps) {
 
   const animateTimelineScroll = useCallback(() => {
     if (!timelineRef.current) return
-
-    // Check reduced motion preference inside callback for reactivity
-    const prefersReducedMotion = window.matchMedia(
-      '(prefers-reduced-motion: reduce)',
-    ).matches
-
-    // Skip animation for users who prefer reduced motion
-    if (prefersReducedMotion) {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current)
-      }
-      timelineRef.current.scrollLeft = targetScrollRef.current
-      currentScrollRef.current = targetScrollRef.current
-      animationRef.current = null
-      return
-    }
 
     const diff = targetScrollRef.current - currentScrollRef.current
     if (Math.abs(diff) < 0.5) {
@@ -138,50 +126,20 @@ export function Timeline({ items }: TimelineProps) {
     <div className="group/scroll">
       {/* Cards section with buttons centered on cards only */}
       <div className="relative">
-        {/* Left scroll button */}
-        {needsScroll && (
-          <button
-            onClick={() => scroll('left')}
-            disabled={!canScrollLeft}
-            tabIndex={canScrollLeft ? 0 : -1}
-            aria-hidden={!canScrollLeft}
-            className={cn(
-              'absolute left-3 top-1/2 -translate-y-1/2 z-10',
-              'w-10 h-10 flex items-center justify-center',
-              'rounded-full bg-background/80 backdrop-blur-sm border border-border shadow-lg',
-              'transition-all duration-200',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-              canScrollLeft
-                ? 'opacity-0 group-hover/scroll:opacity-100 hover:bg-secondary hover:border-primary/30'
-                : 'opacity-0 pointer-events-none',
-            )}
-            aria-label="Scroll left"
-          >
-            <span className="i-lucide-chevron-left size-5" />
-          </button>
-        )}
-
-        {/* Right scroll button */}
-        {needsScroll && (
-          <button
-            onClick={() => scroll('right')}
-            disabled={!canScrollRight}
-            tabIndex={canScrollRight ? 0 : -1}
-            aria-hidden={!canScrollRight}
-            className={cn(
-              'absolute right-3 top-1/2 -translate-y-1/2 z-10',
-              'w-10 h-10 flex items-center justify-center',
-              'rounded-full bg-background/80 backdrop-blur-sm border border-border shadow-lg',
-              'transition-all duration-200',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-              canScrollRight
-                ? 'opacity-0 group-hover/scroll:opacity-100 hover:bg-secondary hover:border-primary/30'
-                : 'opacity-0 pointer-events-none',
-            )}
-            aria-label="Scroll right"
-          >
-            <span className="i-lucide-chevron-right size-5" />
-          </button>
+        {/* Scroll buttons */}
+        {scrollState.needsScroll && (
+          <>
+            <ScrollButton
+              direction="left"
+              onClick={() => scroll('left')}
+              enabled={scrollState.canLeft}
+            />
+            <ScrollButton
+              direction="right"
+              onClick={() => scroll('right')}
+              enabled={scrollState.canRight}
+            />
+          </>
         )}
 
         {/* Scrollable cards */}
@@ -215,22 +173,51 @@ export function Timeline({ items }: TimelineProps) {
   )
 }
 
+interface ScrollButtonProps {
+  direction: 'left' | 'right'
+  onClick: () => void
+  enabled: boolean
+}
+
+function ScrollButton({ direction, onClick, enabled }: ScrollButtonProps) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={!enabled}
+      tabIndex={enabled ? 0 : -1}
+      aria-hidden={!enabled}
+      className={cn(
+        'absolute top-1/2 -translate-y-1/2 z-10',
+        direction === 'left' ? 'left-3' : 'right-3',
+        'w-10 h-10 flex items-center justify-center',
+        'rounded-full bg-background/80 backdrop-blur-sm border border-border shadow-lg',
+        'transition-all duration-200',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        enabled
+          ? 'opacity-0 group-hover/scroll:opacity-100 hover:bg-secondary hover:border-primary/30'
+          : 'opacity-0 pointer-events-none',
+      )}
+      aria-label={`Scroll ${direction}`}
+    >
+      <span className={`i-lucide-chevron-${direction} size-5`} />
+    </button>
+  )
+}
+
 interface TimelineSegmentProps {
   date: string
   itemCount: number
 }
 
-function TimelineSegment({ date, itemCount }: TimelineSegmentProps) {
-  const localDate = useMemo(() => parseLocalDate(date), [date])
-
-  const formattedDate = useMemo(
-    () =>
-      localDate.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-      }),
-    [localDate],
-  )
+const TimelineSegment = memo(function TimelineSegment({
+  date,
+  itemCount,
+}: TimelineSegmentProps) {
+  const localDate = parseLocalDate(date)
+  const formattedDate = localDate.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  })
 
   // Width matches cards above: itemCount * cardWidth + (itemCount - 1) * gap
   const segmentWidth = itemCount * CARD_WIDTH_PX + (itemCount - 1) * GAP_PX
@@ -249,20 +236,28 @@ function TimelineSegment({ date, itemCount }: TimelineSegmentProps) {
       <div className="flex-1 h-px bg-border ml-3 min-w-8" />
     </div>
   )
-}
+})
 
-const EPISODE_TYPE_LABELS: Record<string, string> = {
+const EPISODE_TYPE_LABELS: Record<EpisodeType, string> = {
   series_premiere: 'New Series',
   season_premiere: 'Season Premiere',
   mid_season_premiere: 'Mid-Premiere',
   mid_season_finale: 'Mid-Finale',
   season_finale: 'Season Finale',
   series_finale: 'The End',
+  standard: 'Episode',
 }
 
-function TimelineCard({ item }: { item: CalendarItem }) {
+const TimelineCard = memo(function TimelineCard({
+  item,
+}: {
+  item: CalendarItem
+}) {
   const [imgError, setImgError] = useState(false)
-  const badgeLabel = item.episode_type && EPISODE_TYPE_LABELS[item.episode_type]
+  const badgeLabel =
+    item.episode_type &&
+    item.episode_type !== 'standard' &&
+    EPISODE_TYPE_LABELS[item.episode_type]
 
   return (
     <a
@@ -313,9 +308,9 @@ function TimelineCard({ item }: { item: CalendarItem }) {
           {item.title}
         </h4>
         <p className="text-xs text-muted-foreground truncate mt-0.5 min-h-4">
-          {item.subtitle ?? '\u00A0'}
+          {item.subtitle}
         </p>
       </div>
     </a>
   )
-}
+})

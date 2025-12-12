@@ -96,7 +96,7 @@ export default function Watchlog() {
           <h2 className="font-serif text-2xl font-medium text-foreground mb-6">
             Statistics
           </h2>
-          <StatsBar stats={data?.stats ?? null} isLoading={isLoading} />
+          <StatsBar stats={data?.stats} isLoading={isLoading} />
         </section>
       </Container>
     </div>

@@ -2,7 +2,7 @@ import type { WatchlogStats } from '@/types/watchlog'
 import { Skeleton } from '@/components/ui/skeleton'
 
 interface StatsBarProps {
-  stats: WatchlogStats | null
+  stats?: WatchlogStats
   isLoading: boolean
 }
 

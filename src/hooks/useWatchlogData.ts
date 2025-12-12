@@ -13,31 +13,32 @@ if (!GIST_ID || !GIST_FILENAME) {
 const GIST_RAW_URL = `https://gist.githubusercontent.com/raw/${GIST_ID}/${GIST_FILENAME}`
 
 interface UseWatchlogDataResult {
-  data: WatchlogData | null
+  data?: WatchlogData
   isLoading: boolean
-  error: string | null
+  error?: string
 }
 
 export function useWatchlogData(): UseWatchlogDataResult {
-  const [data, setData] = useState<WatchlogData | null>(null)
+  const [data, setData] = useState<WatchlogData>()
   const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string>()
 
   useEffect(() => {
     const controller = new AbortController()
 
     const fetchData = async () => {
-      try {
-        setIsLoading(true)
-        setError(null)
+      setIsLoading(true)
+      setError(undefined)
 
+      try {
         const response = await fetch(GIST_RAW_URL, {
           cache: 'no-cache',
           signal: controller.signal,
         })
 
         if (!response.ok) {
-          throw new Error(`Failed to fetch: ${response.status}`)
+          setError(`Failed to fetch: ${response.status}`)
+          return
         }
 
         setData(await response.json())
@@ -51,7 +52,7 @@ export function useWatchlogData(): UseWatchlogDataResult {
       }
     }
 
-    fetchData()
+    void fetchData()
     return () => controller.abort()
   }, [])
 

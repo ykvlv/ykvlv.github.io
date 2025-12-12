@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 
 type Theme = 'light' | 'dark' | 'system'
 
-const STORAGE_KEY = 'theme'
+const STORAGE_KEY = 'ykvlv_theme'
 
 function getSystemTheme(): 'light' | 'dark' {
   if (typeof window === 'undefined') return 'light'
