@@ -11,7 +11,8 @@
  * - Parallel API requests for performance
  */
 
-import * as libsodium from 'libsodium-wrappers'
+// @ts-expect-error - default export exists at runtime in Bun
+import libsodium from 'libsodium-wrappers'
 import type {
   WatchlogItem,
   WatchlogStats,
