@@ -1,9 +1,10 @@
-import { Container } from '@/components/layout/Container'
-import { useWatchlogData } from '@/hooks/useWatchlogData'
-import { StatsBar } from '@/components/watchlog/StatsBar'
-import { Timeline } from '@/components/watchlog/Timeline'
-import { WatchlogCard } from '@/components/watchlog/WatchlogCard'
-import { Skeleton } from '@/components/ui/skeleton'
+import { Container, Skeleton } from '@/shared'
+import {
+  useWatchlogData,
+  StatsBar,
+  Timeline,
+  WatchlogCard,
+} from '@/features/watchlog'
 
 export default function Watchlog() {
   const { data, isLoading, error } = useWatchlogData()

@@ -19,7 +19,7 @@ import type {
   CalendarItem,
   WatchlogData,
   EpisodeType,
-} from '../src/types/watchlog'
+} from '@/features/watchlog'
 
 // ============================================================================
 // Constants

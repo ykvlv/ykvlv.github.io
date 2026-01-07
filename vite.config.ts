@@ -19,7 +19,7 @@ function spa404Plugin(): Plugin {
 // https://vite.dev/config/
 export default defineConfig({
   base: '/',
-  envPrefix: ['VITE_', 'GIST_'],
+  envPrefix: ['VITE_', 'GIST_', 'YANDEX_MUSIC_'],
   plugins: [
     UnoCSS(),
     react(),
@@ -47,6 +47,18 @@ export default defineConfig({
               expiration: {
                 maxEntries: 200,
                 maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+              },
+            },
+          },
+          {
+            urlPattern:
+              /^https:\/\/avatars\.yandex\.net\/get-music-content\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'yandex-music-covers',
+              expiration: {
+                maxEntries: 5000,
+                maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
               },
             },
           },

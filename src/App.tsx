@@ -1,11 +1,11 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { lazy, Suspense } from 'react'
 import { AppLayout } from '@/layouts/AppLayout'
-import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
-import { Skeleton } from '@/components/ui/skeleton'
+import { ErrorBoundary, Skeleton } from '@/shared'
 import Home from '@/pages/Home'
 
 const Watchlog = lazy(() => import('@/pages/Watchlog'))
+const Playlists = lazy(() => import('@/pages/Playlists'))
 
 function PageLoader() {
   return (
@@ -35,6 +35,14 @@ function App() {
               element={
                 <Suspense fallback={<PageLoader />}>
                   <Watchlog />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/playlists"
+              element={
+                <Suspense fallback={<PageLoader />}>
+                  <Playlists />
                 </Suspense>
               }
             />

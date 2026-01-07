@@ -1,6 +1,5 @@
-import { Container } from '@/components/layout/Container'
-import { Hero } from '@/components/home/Hero'
-import { ProjectCard } from '@/components/home/ProjectCard'
+import { Container } from '@/shared'
+import { Hero, ProjectCard } from '@/features/home'
 
 export default function Home() {
   return (
@@ -19,6 +18,12 @@ export default function Home() {
               description="Track what I'm watching. Movies, TV shows, and upcoming releases synced from Trakt."
               href="/watchlog"
               icon="i-lucide-film"
+            />
+            <ProjectCard
+              title="Playlists"
+              description="Sort Yandex Music liked tracks into playlists by BPM and mood."
+              href="/playlists"
+              icon="i-lucide-music"
             />
           </div>
         </Container>

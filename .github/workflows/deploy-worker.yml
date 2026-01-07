@@ -1,0 +1,28 @@
+name: Deploy Yandex Music Proxy Worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'workers/yandex-music-proxy/**'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🥯 Install Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: 📦 Install dependencies
+        run: bun install
+
+      - name: 🚀 Deploy to Cloudflare Workers
+        run: bunx wrangler deploy
+        working-directory: workers/yandex-music-proxy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

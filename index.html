@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#F7F5F2" />
     <meta name="description" content="personal website" />
@@ -12,19 +12,19 @@
   <body>
     <script>
       ;(function () {
-        var stored = localStorage.getItem('theme')
-        var theme =
+        const stored = localStorage.getItem('ykvlv_theme')
+        const theme =
           stored === 'light' || stored === 'dark'
             ? stored
             : window.matchMedia('(prefers-color-scheme: dark)').matches
               ? 'dark'
               : 'light'
         // colors must match src/hooks/useTheme.ts
-        var bg = theme === 'dark' ? '#0A0E14' : '#F7F5F2'
+        const bg = theme === 'dark' ? '#0A0E14' : '#F7F5F2'
         document.documentElement.classList.add(theme)
         document.documentElement.style.backgroundColor = bg
         document.body.style.backgroundColor = bg
-        var meta = document.querySelector('meta[name="theme-color"]')
+        const meta = document.querySelector('meta[name="theme-color"]')
         if (meta) meta.setAttribute('content', bg)
       })()
     </script>
