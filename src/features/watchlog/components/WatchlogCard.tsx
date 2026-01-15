@@ -1,23 +1,10 @@
 import { useState } from 'react'
 import type { WatchlogItem } from '../types'
+import { parseWatchedAt } from '../lib/watched-date'
 import { cn } from '@/shared'
 
 interface WatchlogCardProps {
   item: WatchlogItem
-}
-
-function formatRelativeTime(dateStr: string): string {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-
-  if (diffDays === 0) return 'Today'
-  if (diffDays === 1) return 'Yesterday'
-  if (diffDays < 7) return `${diffDays}d ago`
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`
-  if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`
-  return `${Math.floor(diffDays / 365)}y ago`
 }
 
 function getTypeIcon(type: WatchlogItem['type']): string {
@@ -32,7 +19,7 @@ function getTypeIcon(type: WatchlogItem['type']): string {
 
 export function WatchlogCard({ item }: WatchlogCardProps) {
   const [imgError, setImgError] = useState(false)
-  const relativeTime = formatRelativeTime(item.watched_at)
+  const relativeTime = parseWatchedAt(item.watched_at)
   const typeIcon = getTypeIcon(item.type)
 
   return (

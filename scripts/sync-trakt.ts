@@ -13,12 +13,14 @@
 
 // @ts-expect-error - default export exists at runtime in Bun
 import libsodium from 'libsodium-wrappers'
-import type {
-  WatchlogItem,
-  WatchlogStats,
-  CalendarItem,
-  WatchlogData,
-  EpisodeType,
+import { format } from 'date-fns'
+import {
+  formatWatchedAtAuto,
+  type WatchlogItem,
+  type WatchlogStats,
+  type CalendarItem,
+  type WatchlogData,
+  type EpisodeType,
 } from '@/features/watchlog'
 
 // ============================================================================
@@ -342,7 +344,7 @@ class TraktClient {
   }
 
   async getRawCalendar(): Promise<RawCalendar> {
-    const today = toDateString(new Date().toISOString())
+    const today = format(new Date(), 'yyyy-MM-dd')
 
     const [episodes, movies] = await Promise.all([
       this.get<TraktCalendarEpisode[]>(
@@ -367,14 +369,6 @@ function getPosterUrl(images?: TraktImages): string | undefined {
   return poster.startsWith('http') ? poster : `https://${poster}`
 }
 
-/**
- * Extracts date (YYYY-MM-DD) from ISO timestamp.
- * Trakt returns UTC timestamps, we use UTC date as-is without timezone conversion.
- */
-function toDateString(iso: string): string {
-  return iso.split('T')[0]
-}
-
 function buildShowUrl(slug: string, season: number, episode?: number): string {
   const base = `https://trakt.tv/shows/${slug}/seasons/${season}`
   return episode ? `${base}/episodes/${episode}` : base
@@ -384,7 +378,10 @@ function buildShowUrl(slug: string, season: number, episode?: number): string {
 // Grouping Logic
 // ============================================================================
 
-function groupHistory(history: TraktHistoryItem[]): GroupedItem[] {
+function groupHistory(
+  history: TraktHistoryItem[],
+  referenceDate: Date,
+): GroupedItem[] {
   const items: GroupedItem[] = []
   let currentGroup: GroupedSeason | undefined
 
@@ -403,12 +400,13 @@ function groupHistory(history: TraktHistoryItem[]): GroupedItem[] {
       const showId = item.show.ids.trakt
       const season = item.episode.season
 
-      const currentDate = toDateString(item.watched_at)
+      const currentPeriod = formatWatchedAtAuto(item.watched_at, referenceDate)
       const isSameGroup =
         currentGroup &&
         currentGroup.show.ids.trakt === showId &&
         currentGroup.season === season &&
-        toDateString(currentGroup.watched_at) === currentDate
+        formatWatchedAtAuto(currentGroup.watched_at, referenceDate) ===
+          currentPeriod
 
       if (currentGroup && isSameGroup) {
         // Don't update watched_at - keep the first (most recent) timestamp
@@ -461,6 +459,7 @@ function enrichItems(
   grouped: GroupedItem[],
   seasonsMap: Map<string, Map<number, TraktSeason>>,
   ratings: Ratings,
+  referenceDate: Date,
 ): WatchlogItem[] {
   return grouped.map((item): WatchlogItem => {
     if (item.type === 'movie') {
@@ -472,7 +471,7 @@ function enrichItems(
         title: item.movie.title,
         year: item.movie.year,
         ...(poster && { poster }),
-        watched_at: toDateString(item.watched_at),
+        watched_at: formatWatchedAtAuto(item.watched_at, referenceDate),
         trakt_url: `https://trakt.tv/movies/${item.movie.ids.slug}`,
         ...(rating && { rating }),
       }
@@ -508,7 +507,7 @@ function enrichItems(
         subtitle,
         year,
         ...(poster && { poster }),
-        watched_at: toDateString(group.watched_at),
+        watched_at: formatWatchedAtAuto(group.watched_at, referenceDate),
         trakt_url: buildShowUrl(group.show.ids.slug, group.season, episodes[0]),
         ...(rating && { rating }),
       }
@@ -520,7 +519,7 @@ function enrichItems(
       subtitle,
       year,
       ...(poster && { poster }),
-      watched_at: toDateString(group.watched_at),
+      watched_at: formatWatchedAtAuto(group.watched_at, referenceDate),
       trakt_url: buildShowUrl(group.show.ids.slug, group.season),
       ...(seasonRating && { rating: seasonRating }),
     }
@@ -552,7 +551,7 @@ function groupCalendarEpisodes(
   const groups = new Map<string, GroupedCalendarEpisode>()
 
   for (const ep of episodes) {
-    const date = toDateString(ep.first_aired)
+    const date = format(new Date(ep.first_aired), 'yyyy-MM-dd')
     const key = `${date}|${ep.show.ids.slug}|${ep.episode.season}`
     const epType = ep.episode.episode_type
 
@@ -797,7 +796,8 @@ async function main() {
 
   // Phase 2: Group episodes by season + collect all slugs
   console.log('Grouping episodes...')
-  const grouped = groupHistory(history)
+  const referenceDate = new Date()
+  const grouped = groupHistory(history, referenceDate)
   const slugs = collectUniqueSlugs(grouped, rawCalendar)
   console.log(
     `Grouped into ${grouped.length} items, ${slugs.length} unique shows`,
@@ -811,7 +811,7 @@ async function main() {
   ])
 
   // Phase 4: Enrich history and calendar
-  const items = enrichItems(grouped, seasonsMap, ratings).slice(
+  const items = enrichItems(grouped, seasonsMap, ratings, referenceDate).slice(
     0,
     OUTPUT_ITEMS_LIMIT,
   )
