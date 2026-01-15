@@ -2,7 +2,7 @@
  * Sync Trakt watch history to GitHub Gist
  *
  * Fetches movie/show history, ratings, and calendar from Trakt API,
- * groups consecutive episodes by show+season
+ * groups consecutive episodes by show+season,
  * and saves to a public Gist for frontend consumption.
  *
  * Features:
@@ -367,6 +367,10 @@ function getPosterUrl(images?: TraktImages): string | undefined {
   return poster.startsWith('http') ? poster : `https://${poster}`
 }
 
+/**
+ * Extracts date (YYYY-MM-DD) from ISO timestamp.
+ * Trakt returns UTC timestamps, we use UTC date as-is without timezone conversion.
+ */
 function toDateString(iso: string): string {
   return iso.split('T')[0]
 }
@@ -399,11 +403,14 @@ function groupHistory(history: TraktHistoryItem[]): GroupedItem[] {
       const showId = item.show.ids.trakt
       const season = item.episode.season
 
-      if (
+      const currentDate = toDateString(item.watched_at)
+      const isSameGroup =
         currentGroup &&
         currentGroup.show.ids.trakt === showId &&
-        currentGroup.season === season
-      ) {
+        currentGroup.season === season &&
+        toDateString(currentGroup.watched_at) === currentDate
+
+      if (currentGroup && isSameGroup) {
         // Don't update watched_at - keep the first (most recent) timestamp
         currentGroup.episodes.push(item.episode.number)
       } else {
