@@ -37,6 +37,10 @@ function isOriginAllowed(origin: string): boolean {
 function addCorsHeaders(headers: Headers, origin: string): Headers {
   headers.set('Access-Control-Allow-Origin', origin)
   headers.set('Access-Control-Allow-Credentials', 'true')
+  headers.set(
+    'Access-Control-Expose-Headers',
+    'Content-Range, Accept-Ranges, Content-Length',
+  )
   return headers
 }
 
@@ -46,7 +50,7 @@ function corsResponse(origin: string): Response {
     headers: {
       'Access-Control-Allow-Origin': isOriginAllowed(origin) ? origin : '',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, Range',
       'Access-Control-Max-Age': '86400',
     },
   })
@@ -93,8 +97,16 @@ async function proxyExternalUrl(
   url: string,
   origin: string,
   contentType?: string,
+  request?: Request,
 ): Promise<Response> {
-  const response = await fetch(url)
+  const fetchHeaders = new Headers()
+  const rangeHeader = request?.headers.get('Range')
+  if (rangeHeader) {
+    fetchHeaders.set('Range', rangeHeader)
+  }
+
+  const response = await fetch(url, { headers: fetchHeaders })
+
   const headers = new Headers()
   addCorsHeaders(headers, origin)
   headers.set(
@@ -103,6 +115,13 @@ async function proxyExternalUrl(
       response.headers.get('Content-Type') ||
       'application/octet-stream',
   )
+
+  // Forward range-related headers for seeking support
+  for (const name of ['Content-Range', 'Accept-Ranges', 'Content-Length']) {
+    const value = response.headers.get(name)
+    if (value) headers.set(name, value)
+  }
+
   return new Response(response.body, { status: response.status, headers })
 }
 
@@ -119,14 +138,18 @@ async function handleDownloadInfo(url: URL, origin: string): Promise<Response> {
   }
 }
 
-async function handleProxyAudio(url: URL, origin: string): Promise<Response> {
+async function handleProxyAudio(
+  request: Request,
+  url: URL,
+  origin: string,
+): Promise<Response> {
   const audioUrl = url.searchParams.get('url')
   if (!audioUrl) return badRequestResponse('Missing url parameter', origin)
   if (!isExternalUrlAllowed(audioUrl))
     return forbiddenResponse('URL not allowed', origin)
 
   try {
-    return await proxyExternalUrl(audioUrl, origin, 'audio/mpeg')
+    return await proxyExternalUrl(audioUrl, origin, 'audio/mpeg', request)
   } catch (error) {
     return errorResponse(error, 'Failed to fetch audio', origin)
   }
@@ -202,7 +225,7 @@ export default {
       case '/download-info':
         return handleDownloadInfo(url, origin)
       case '/proxy-audio':
-        return handleProxyAudio(url, origin)
+        return handleProxyAudio(request, url, origin)
       default:
         return handleYandexApiProxy(request, url, origin)
     }
