@@ -1,5 +1,5 @@
 import { Component, type ReactNode, type ErrorInfo } from 'react'
-import { Container } from '@/shared'
+import { Container } from './layout/Container'
 
 interface Props {
   children: ReactNode

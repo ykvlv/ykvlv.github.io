@@ -15,6 +15,121 @@ const PROXY_URL = import.meta.env.YANDEX_MUSIC_PROXY_URL
 const YANDEX_DOWNLOAD_SALT = 'XGRlBW9FXlekgbPrRHuSiA' // Not secret
 
 // ============================================================================
+// Errors
+// ============================================================================
+
+export type YandexApiErrorCategory =
+  | 'auth'
+  | 'worker'
+  | 'network'
+  | 'timeout'
+  | 'unknown'
+
+export class YandexApiError extends Error {
+  readonly status: number | null
+  readonly bodyText: string
+  readonly category: YandexApiErrorCategory
+
+  constructor(args: {
+    message: string
+    status: number | null
+    bodyText: string
+    category: YandexApiErrorCategory
+  }) {
+    super(args.message)
+    this.name = 'YandexApiError'
+    this.status = args.status
+    this.bodyText = args.bodyText
+    this.category = args.category
+  }
+}
+
+function categorizeStatus(status: number): YandexApiErrorCategory {
+  if (status === 401 || status === 403) return 'auth'
+  if (status >= 500) return 'worker'
+  return 'unknown'
+}
+
+interface FetchWithTimeoutOptions extends RequestInit {
+  timeoutMs?: number
+}
+
+/**
+ * fetch() with a hard timeout and structured error categorization.
+ * Distinguishes our timeout from external abort, and bucketizes failures
+ * so callers (auth restore, retry logic) can react appropriately.
+ */
+async function fetchWithTimeout(
+  input: string,
+  options: FetchWithTimeoutOptions = {},
+): Promise<Response> {
+  const { timeoutMs = 15000, signal: externalSignal, ...rest } = options
+  const controller = new AbortController()
+
+  let didTimeout = false
+  const timeoutId = setTimeout(() => {
+    didTimeout = true
+    controller.abort()
+  }, timeoutMs)
+
+  const onExternalAbort = () => controller.abort()
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort()
+    } else {
+      externalSignal.addEventListener('abort', onExternalAbort, { once: true })
+    }
+  }
+
+  try {
+    const response = await fetch(input, { ...rest, signal: controller.signal })
+    if (!response.ok) {
+      const bodyText = await response.text().catch(() => '')
+      throw new YandexApiError({
+        message: `[YandexMusicAPI] API error: ${response.status} - ${bodyText}`,
+        status: response.status,
+        bodyText,
+        category: categorizeStatus(response.status),
+      })
+    }
+    return response
+  } catch (err) {
+    if (err instanceof YandexApiError) throw err
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      if (didTimeout) {
+        throw new YandexApiError({
+          message: `[YandexMusicAPI] Request timed out after ${timeoutMs}ms`,
+          status: null,
+          bodyText: '',
+          category: 'timeout',
+        })
+      }
+      throw err // External abort — propagate as plain AbortError
+    }
+    if (err instanceof TypeError) {
+      throw new YandexApiError({
+        message: `[YandexMusicAPI] Network error: ${err.message}`,
+        status: null,
+        bodyText: err.message,
+        category: 'network',
+      })
+    }
+    const message = err instanceof Error ? err.message : String(err)
+    throw new YandexApiError({
+      message: `[YandexMusicAPI] ${message}`,
+      status: null,
+      bodyText: message,
+      category: 'unknown',
+    })
+  } finally {
+    clearTimeout(timeoutId)
+    if (externalSignal) {
+      externalSignal.removeEventListener('abort', onExternalAbort)
+    }
+  }
+}
+
+// ============================================================================
 // Internal Types
 // ============================================================================
 
@@ -72,28 +187,24 @@ export class YandexMusicAPI {
   private static async fetchApi(
     endpoint: string,
     token: string,
-    init: RequestInit = {},
+    init: FetchWithTimeoutOptions = {},
   ): Promise<Response> {
     if (!PROXY_URL) {
-      throw new Error('[YandexMusicAPI] Proxy URL is not configured')
+      throw new YandexApiError({
+        message: '[YandexMusicAPI] Proxy URL is not configured',
+        status: null,
+        bodyText: '',
+        category: 'unknown',
+      })
     }
 
-    const response = await fetch(`${PROXY_URL}${endpoint}`, {
+    return fetchWithTimeout(`${PROXY_URL}${endpoint}`, {
       ...init,
       headers: {
         ...init.headers,
         Authorization: `OAuth ${token}`,
       },
     })
-
-    if (!response.ok) {
-      const text = await response.text()
-      throw new Error(
-        `[YandexMusicAPI] API error: ${response.status} - ${text}`,
-      )
-    }
-
-    return response
   }
 
   /** Authenticated request with form-urlencoded body */
@@ -135,9 +246,11 @@ export class YandexMusicAPI {
   static async fetchAccountStatus(
     token: string,
     signal: AbortSignal,
+    timeoutMs?: number,
   ): Promise<YandexUserInfo> {
     const response = await YandexMusicAPI.fetchApi('/account/status', token, {
       signal,
+      timeoutMs,
     })
     const data: AccountStatusResponse = await response.json()
     const account = data.result?.account
@@ -152,13 +265,33 @@ export class YandexMusicAPI {
     }
   }
 
-  /** Fetch audio file as ArrayBuffer */
+  /** Build a streamable URL for use with HTMLAudioElement.src */
+  static getProxyAudioStreamUrl(audioUrl: string): string {
+    if (!PROXY_URL) {
+      throw new YandexApiError({
+        message: '[YandexMusicAPI] Proxy URL is not configured',
+        status: null,
+        bodyText: '',
+        category: 'unknown',
+      })
+    }
+    return `${PROXY_URL}/proxy-audio?url=${encodeURIComponent(audioUrl)}`
+  }
+
+  /** Fetch audio file as ArrayBuffer.
+   *  Uses raw fetch (not fetchWithTimeout) so the caller's AbortSignal
+   *  stays active during body download — aborting cancels immediately. */
   static async fetchProxyAudio(
     audioUrl: string,
     signal: AbortSignal,
   ): Promise<ArrayBuffer> {
     if (!PROXY_URL) {
-      throw new Error('[YandexMusicAPI] Proxy URL is not configured')
+      throw new YandexApiError({
+        message: '[YandexMusicAPI] Proxy URL is not configured',
+        status: null,
+        bodyText: '',
+        category: 'unknown',
+      })
     }
 
     const response = await fetch(
@@ -167,10 +300,13 @@ export class YandexMusicAPI {
     )
 
     if (!response.ok) {
-      const text = await response.text()
-      throw new Error(
-        `[YandexMusicAPI] API error: ${response.status} - ${text}`,
-      )
+      const bodyText = await response.text().catch(() => '')
+      throw new YandexApiError({
+        message: `[YandexMusicAPI] Audio fetch failed: ${response.status} - ${bodyText}`,
+        status: response.status,
+        bodyText,
+        category: categorizeStatus(response.status),
+      })
     }
 
     return response.arrayBuffer()
@@ -235,12 +371,9 @@ export class YandexMusicAPI {
         // Don't retry AbortError
         if (err instanceof DOMException && err.name === 'AbortError') throw err
 
-        // Check if this is a revision conflict (409 or revision-related error)
+        // Check if this is a revision conflict (HTTP 409)
         const isRevisionConflict =
-          err instanceof Error &&
-          (err.message.includes('revision') ||
-            err.message.includes('conflict') ||
-            err.message.includes('409'))
+          err instanceof YandexApiError && err.status === 409
 
         // Only retry on revision conflicts
         if (!isRevisionConflict) {
@@ -407,4 +540,10 @@ export class YandexMusicAPI {
 
 export function getCoverUrl(uri: string, size = '200x200'): string {
   return `https://${uri.replace('%%', size)}`
+}
+
+export function joinArtists(track: {
+  artists: Array<{ name: string }>
+}): string {
+  return track.artists.map((a) => a.name).join(', ') || 'Unknown artist'
 }

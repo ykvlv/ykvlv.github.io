@@ -19,7 +19,7 @@ import {
 } from './usePlaylistsMutations'
 
 interface UsePlaylistsDataProps {
-  token?: string
+  api: YandexMusicAPI
   uid?: number
 }
 
@@ -28,6 +28,7 @@ export interface UsePlaylistsDataResult {
     playlists: YandexPlaylist[]
     totalLikedCount: number
     unsortedTrackIds: string[]
+    failedPlaylistKinds: Set<number>
   }
   selection: {
     selectedPlaylistKinds: number[]
@@ -51,7 +52,9 @@ export interface UsePlaylistsDataResult {
   }
   status: {
     isLoading: boolean
+    isLoadingTracks: boolean
     error: string | null
+    isAuthError: boolean
     refresh: () => Promise<void>
   }
 }
@@ -61,11 +64,9 @@ export interface UsePlaylistsDataResult {
  * Composes smaller specialized hooks for better maintainability.
  */
 export function usePlaylistsData({
-  token,
+  api,
   uid,
 }: UsePlaylistsDataProps): UsePlaylistsDataResult {
-  const api = useMemo(() => (token ? new YandexMusicAPI(token) : null), [token])
-
   // Local state for data that can be mutated
   const [localPlaylists, setLocalPlaylists] = useState<YandexPlaylist[] | null>(
     null,
@@ -117,9 +118,10 @@ export function usePlaylistsData({
   )
 
   // Compute unsorted track IDs (liked but not in selected playlists)
+  // When no playlists selected, show ALL liked tracks
   const unsortedTrackIds = useMemo((): string[] => {
     if (sortedSelectedKinds.length === 0) {
-      return [] // Don't show until playlists are selected
+      return likedTrackIds
     }
 
     const sortedTrackIds = new Set<string>()
@@ -145,8 +147,7 @@ export function usePlaylistsData({
     () => ({
       onTrackAdded: (trackId: string, playlistKind: number) => {
         // Validate playlist exists first to prevent state inconsistency
-        const freshPlaylists =
-          localPlaylists ?? fetchedDataRef.current.playlists
+        const freshPlaylists = fetchedDataRef.current.playlists
         const playlistExists = freshPlaylists.some(
           (p) => p.kind === playlistKind,
         )
@@ -157,33 +158,31 @@ export function usePlaylistsData({
           return // Don't update any state
         }
 
-        // Update playlist tracks
-        let wasActuallyAdded = false
         setLocalPlaylistTracks((prev) => {
-          // Use prev if available, otherwise use fresh data from ref
           const base = prev ?? fetchedDataRef.current.playlistTracks
+          const existingTracks = base.get(playlistKind)
+          const wasActuallyAdded = !existingTracks?.has(trackId)
+
           const newMap = new Map(base)
           const tracks = new Set(newMap.get(playlistKind) || [])
-          // Check if track is new to prevent count/Set size inconsistency
-          wasActuallyAdded = !tracks.has(trackId)
           tracks.add(trackId)
           newMap.set(playlistKind, tracks)
+
+          // Update playlist track count only if track was actually new
+          if (wasActuallyAdded) {
+            setLocalPlaylists((prevPlaylists) => {
+              const basePlaylists =
+                prevPlaylists ?? fetchedDataRef.current.playlists
+              return basePlaylists.map((p) =>
+                p.kind === playlistKind
+                  ? { ...p, trackCount: p.trackCount + 1 }
+                  : p,
+              )
+            })
+          }
+
           return newMap
         })
-
-        // Update playlist track count only if track was actually new
-        if (wasActuallyAdded) {
-          setLocalPlaylists((prev) => {
-            // Use prev if available, otherwise use fresh data from ref
-            const base = prev ?? fetchedDataRef.current.playlists
-
-            return base.map((p) =>
-              p.kind === playlistKind
-                ? { ...p, trackCount: p.trackCount + 1 }
-                : p,
-            )
-          })
-        }
       },
       onTrackUnliked: (trackId: string) => {
         // Remove from liked tracks
@@ -194,8 +193,7 @@ export function usePlaylistsData({
       },
       onTrackAddRollback: (trackId: string, playlistKind: number) => {
         // Validate playlist exists first
-        const freshPlaylists =
-          localPlaylists ?? fetchedDataRef.current.playlists
+        const freshPlaylists = fetchedDataRef.current.playlists
         const playlistExists = freshPlaylists.some(
           (p) => p.kind === playlistKind,
         )
@@ -206,31 +204,31 @@ export function usePlaylistsData({
           return // Don't update any state
         }
 
-        // Rollback track addition on API failure
-        let wasActuallyInSet = false
         setLocalPlaylistTracks((prev) => {
           const base = prev ?? fetchedDataRef.current.playlistTracks
+          const existingTracks = base.get(playlistKind)
+          const wasActuallyInSet = existingTracks?.has(trackId) ?? false
+
           const newMap = new Map(base)
           const tracks = new Set(newMap.get(playlistKind) || [])
-          // Check if track was actually in Set to prevent count/Set size inconsistency
-          wasActuallyInSet = tracks.has(trackId)
           tracks.delete(trackId)
           newMap.set(playlistKind, tracks)
+
+          // Rollback playlist track count only if track was actually in Set
+          if (wasActuallyInSet) {
+            setLocalPlaylists((prevPlaylists) => {
+              const basePlaylists =
+                prevPlaylists ?? fetchedDataRef.current.playlists
+              return basePlaylists.map((p) =>
+                p.kind === playlistKind
+                  ? { ...p, trackCount: Math.max(0, p.trackCount - 1) }
+                  : p,
+              )
+            })
+          }
+
           return newMap
         })
-
-        // Rollback playlist track count only if track was actually in Set
-        if (wasActuallyInSet) {
-          setLocalPlaylists((prev) => {
-            const base = prev ?? fetchedDataRef.current.playlists
-
-            return base.map((p) =>
-              p.kind === playlistKind
-                ? { ...p, trackCount: Math.max(0, p.trackCount - 1) }
-                : p,
-            )
-          })
-        }
       },
       onTrackUnlikedRollback: (trackId: string) => {
         // Rollback track unlike on API failure - restore to liked tracks
@@ -246,7 +244,7 @@ export function usePlaylistsData({
         mutationsDuringRefreshRef.current = true
       },
     }),
-    [], // No dependencies - uses refs for fresh values
+    [],
   )
 
   // Mutations
@@ -280,13 +278,14 @@ export function usePlaylistsData({
         )
       }
     }
-  }, [fetchResult.refresh])
+  }, [fetchResult])
 
   return {
     data: {
       playlists,
       totalLikedCount: likedTrackIds.length,
       unsortedTrackIds,
+      failedPlaylistKinds: fetchResult.failedPlaylistKinds,
     },
     selection: {
       selectedPlaylistKinds,
@@ -307,7 +306,9 @@ export function usePlaylistsData({
     },
     status: {
       isLoading: fetchResult.isLoading,
+      isLoadingTracks: fetchResult.isLoadingTracks,
       error: fetchResult.error,
+      isAuthError: fetchResult.isAuthError,
       refresh,
     },
   }

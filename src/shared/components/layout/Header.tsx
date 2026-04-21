@@ -1,5 +1,7 @@
 import { Link, NavLink } from 'react-router-dom'
-import { Container, ThemeToggle, cn } from '@/shared'
+import { Container } from './Container'
+import { ThemeToggle } from '../ThemeToggle'
+import { cn } from '../../lib/utils'
 import * as React from 'react'
 
 export function Header() {

@@ -10,7 +10,7 @@ export interface YandexTrack {
   coverUri: string
   available: boolean
   derivedColors: {
-    miniPlayer: string // TODO: implement MiniPlayer component
+    miniPlayer: string
   }
 }
 

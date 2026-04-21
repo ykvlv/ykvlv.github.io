@@ -1,9 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { YandexMusicAPI } from '../lib/yandex-music-api'
+import { YandexMusicAPI, YandexApiError } from '../lib/yandex-music-api'
 
 export interface MutationResult {
   success: boolean
   error?: string
+  isAuthError?: boolean
 }
 
 export interface UsePlaylistsMutationsResult {
@@ -68,6 +69,12 @@ export function usePlaylistsMutations({
     callbacksRef.current = callbacks
   }, [callbacks])
 
+  // Ref for isRefreshing to avoid stale closure in async callbacks
+  const isRefreshingRef = useRef(isRefreshing)
+  useEffect(() => {
+    isRefreshingRef.current = isRefreshing
+  }, [isRefreshing])
+
   // Track in-flight requests for cleanup
   const abortControllersRef = useRef<Map<string, AbortController>>(new Map())
   const isMountedRef = useRef(true)
@@ -75,14 +82,17 @@ export function usePlaylistsMutations({
   // Cleanup on unmount or user change to prevent memory leaks
   useEffect(() => {
     isMountedRef.current = true
+    const controllers = abortControllersRef.current
+    const adds = pendingAddsRef.current
+    const unlikes = pendingUnlikesRef.current
     return () => {
       isMountedRef.current = false
       // Abort all in-flight requests
-      abortControllersRef.current.forEach((controller) => controller.abort())
-      abortControllersRef.current.clear()
+      controllers.forEach((controller) => controller.abort())
+      controllers.clear()
       // Clear pending state
-      pendingAddsRef.current.clear()
-      pendingUnlikesRef.current.clear()
+      adds.clear()
+      unlikes.clear()
       setPendingAdds(new Set())
       setPendingUnlikes(new Set())
     }
@@ -94,9 +104,9 @@ export function usePlaylistsMutations({
         return { success: false, error: 'API not initialized' }
       }
 
-      // Check if request already in-flight - return same promise to prevent race condition
-      // This prevents check-then-act race between has() and add()
-      const existing = inFlightAddsRef.current.get(trackId)
+      // Dedupe by track+playlist: each track goes to exactly one playlist at a time
+      const dedupeKey = `${trackId}_${playlistKind}`
+      const existing = inFlightAddsRef.current.get(dedupeKey)
       if (existing) {
         return existing // Return same promise for duplicate concurrent requests
       }
@@ -110,49 +120,51 @@ export function usePlaylistsMutations({
         pendingAddsRef.current.add(trackId)
         setPendingAdds((prev) => new Set(prev).add(trackId))
 
-      // Create abort controller for this request
-      const controller = new AbortController()
-      abortControllersRef.current.set(mutationKey, controller)
+        // Create abort controller for this request
+        const controller = new AbortController()
+        abortControllersRef.current.set(mutationKey, controller)
 
-      try {
-        await api.addTrackToPlaylist(
-          uid,
-          playlistKind,
-          trackId,
-          controller.signal,
-        )
+        try {
+          await api.addTrackToPlaylist(
+            uid,
+            playlistKind,
+            trackId,
+            controller.signal,
+          )
 
-        // Success - notify parent via callback
-        if (isMountedRef.current) {
-          if (!isRefreshing) {
-            // Normal case: update optimistically
-            callbacksRef.current.onTrackAdded(trackId, playlistKind)
-          } else {
-            // Refreshing: mark for re-fetch to sync UI with server state
-            callbacksRef.current.onMutationDuringRefresh()
+          // Success - notify parent via callback
+          if (isMountedRef.current) {
+            if (!isRefreshingRef.current) {
+              // Normal case: update optimistically
+              callbacksRef.current.onTrackAdded(trackId, playlistKind)
+            } else {
+              // Refreshing: mark for re-fetch to sync UI with server state
+              callbacksRef.current.onMutationDuringRefresh()
+            }
           }
-        }
 
-        return { success: true }
-      } catch (err) {
-        if (err instanceof DOMException && err.name === 'AbortError') {
-          return { success: false, error: 'Request cancelled' }
-        }
+          return { success: true }
+        } catch (err) {
+          if (err instanceof DOMException && err.name === 'AbortError') {
+            return { success: false, error: 'Request cancelled' }
+          }
 
-        // Rollback optimistic update on API failure (skip if refreshing to avoid corrupting fresh data)
-        if (isMountedRef.current && !isRefreshing) {
-          callbacksRef.current.onTrackAddRollback(trackId, playlistKind)
-        }
+          // Rollback optimistic update on API failure (skip if refreshing to avoid corrupting fresh data)
+          if (isMountedRef.current && !isRefreshingRef.current) {
+            callbacksRef.current.onTrackAddRollback(trackId, playlistKind)
+          }
 
-        const errorMessage =
-          err instanceof Error ? err.message : 'Failed to add track'
-        return { success: false, error: errorMessage }
+          const errorMessage =
+            err instanceof Error ? err.message : 'Failed to add track'
+          const authError =
+            err instanceof YandexApiError && err.category === 'auth'
+          return { success: false, error: errorMessage, isAuthError: authError }
         } finally {
           // Cleanup (both ref and state)
           // Note: finally always executes even if unmounted, ensuring no memory leaks
           pendingAddsRef.current.delete(trackId)
           abortControllersRef.current.delete(mutationKey)
-          inFlightAddsRef.current.delete(trackId)
+          inFlightAddsRef.current.delete(dedupeKey)
           if (isMountedRef.current) {
             setPendingAdds((prev) => {
               const next = new Set(prev)
@@ -164,11 +176,11 @@ export function usePlaylistsMutations({
       })()
 
       // Store promise to deduplicate concurrent calls
-      inFlightAddsRef.current.set(trackId, promise)
+      inFlightAddsRef.current.set(dedupeKey, promise)
 
       return promise
     },
-    [api, uid, isRefreshing],
+    [api, uid],
   )
 
   const unlikeTrack = useCallback(
@@ -191,38 +203,40 @@ export function usePlaylistsMutations({
         pendingUnlikesRef.current.add(trackId)
         setPendingUnlikes((prev) => new Set(prev).add(trackId))
 
-      // Create abort controller for this request
-      const controller = new AbortController()
-      abortControllersRef.current.set(mutationKey, controller)
+        // Create abort controller for this request
+        const controller = new AbortController()
+        abortControllersRef.current.set(mutationKey, controller)
 
-      try {
-        await api.unlikeTrack(uid, trackId, controller.signal)
+        try {
+          await api.unlikeTrack(uid, trackId, controller.signal)
 
-        // Success - notify parent via callback
-        if (isMountedRef.current) {
-          if (!isRefreshing) {
-            // Normal case: update optimistically
-            callbacksRef.current.onTrackUnliked(trackId)
-          } else {
-            // Refreshing: mark for re-fetch to sync UI with server state
-            callbacksRef.current.onMutationDuringRefresh()
+          // Success - notify parent via callback
+          if (isMountedRef.current) {
+            if (!isRefreshingRef.current) {
+              // Normal case: update optimistically
+              callbacksRef.current.onTrackUnliked(trackId)
+            } else {
+              // Refreshing: mark for re-fetch to sync UI with server state
+              callbacksRef.current.onMutationDuringRefresh()
+            }
           }
-        }
 
-        return { success: true }
-      } catch (err) {
-        if (err instanceof DOMException && err.name === 'AbortError') {
-          return { success: false, error: 'Request cancelled' }
-        }
+          return { success: true }
+        } catch (err) {
+          if (err instanceof DOMException && err.name === 'AbortError') {
+            return { success: false, error: 'Request cancelled' }
+          }
 
-        // Rollback optimistic update on API failure (skip if refreshing to avoid corrupting fresh data)
-        if (isMountedRef.current && !isRefreshing) {
-          callbacksRef.current.onTrackUnlikedRollback(trackId)
-        }
+          // Rollback optimistic update on API failure (skip if refreshing to avoid corrupting fresh data)
+          if (isMountedRef.current && !isRefreshingRef.current) {
+            callbacksRef.current.onTrackUnlikedRollback(trackId)
+          }
 
-        const errorMessage =
-          err instanceof Error ? err.message : 'Failed to unlike track'
-        return { success: false, error: errorMessage }
+          const errorMessage =
+            err instanceof Error ? err.message : 'Failed to unlike track'
+          const authError =
+            err instanceof YandexApiError && err.category === 'auth'
+          return { success: false, error: errorMessage, isAuthError: authError }
         } finally {
           // Cleanup (both ref and state)
           // Note: finally always executes even if unmounted, ensuring no memory leaks
@@ -244,7 +258,7 @@ export function usePlaylistsMutations({
 
       return promise
     },
-    [api, uid, isRefreshing],
+    [api, uid],
   )
 
   return {

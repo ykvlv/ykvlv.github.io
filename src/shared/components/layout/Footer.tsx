@@ -1,4 +1,4 @@
-import { Container } from '@/shared'
+import { Container } from './Container'
 
 export function Footer() {
   const currentYear = new Date().getFullYear()

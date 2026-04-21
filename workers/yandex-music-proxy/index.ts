@@ -4,17 +4,29 @@
  * Required due to Yandex API CORS restrictions.
  */
 
-const YANDEX_API_BASE = 'https://api.music.yandex.net'
+interface Env {
+  ALLOWED_ORIGINS: string
+}
 
-const ALLOWED_ORIGINS = ['https://www.ykvlv.dev', 'http://localhost:5173']
+const YANDEX_API_BASE = 'https://api.music.yandex.net'
 
 const ALLOWED_PATH_PREFIXES = ['/account/status', '/users/', '/tracks']
 
+// Only api.music.yandex.net is needed: the X-Yandex-Music-Client Android header
+// forces Yandex to return download-info/audio URLs on this same CDN host
 const ALLOWED_EXTERNAL_HOSTS = ['api.music.yandex.net']
+
+const FORWARDED_REQUEST_HEADERS = ['authorization', 'content-type', 'accept']
+
+const FORWARDED_RESPONSE_HEADERS = ['content-type', 'content-length']
 
 // ============================================================================
 // Helper Functions
 // ============================================================================
+
+function parseAllowedOrigins(env: Env): string[] {
+  return env.ALLOWED_ORIGINS.split(',').map((s) => s.trim())
+}
 
 function isExternalUrlAllowed(urlString: string): boolean {
   try {
@@ -25,10 +37,10 @@ function isExternalUrlAllowed(urlString: string): boolean {
   }
 }
 
-function isOriginAllowed(origin: string): boolean {
+function isOriginAllowed(origin: string, allowedOrigins: string[]): boolean {
   try {
     const url = new URL(origin)
-    return ALLOWED_ORIGINS.includes(url.origin)
+    return allowedOrigins.includes(url.origin)
   } catch {
     return false
   }
@@ -36,7 +48,6 @@ function isOriginAllowed(origin: string): boolean {
 
 function addCorsHeaders(headers: Headers, origin: string): Headers {
   headers.set('Access-Control-Allow-Origin', origin)
-  headers.set('Access-Control-Allow-Credentials', 'true')
   headers.set(
     'Access-Control-Expose-Headers',
     'Content-Range, Accept-Ranges, Content-Length',
@@ -44,11 +55,13 @@ function addCorsHeaders(headers: Headers, origin: string): Headers {
   return headers
 }
 
-function corsResponse(origin: string): Response {
+function corsResponse(origin: string, allowedOrigins: string[]): Response {
   return new Response(null, {
     status: 204,
     headers: {
-      'Access-Control-Allow-Origin': isOriginAllowed(origin) ? origin : '',
+      'Access-Control-Allow-Origin': isOriginAllowed(origin, allowedOrigins)
+        ? origin
+        : '',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization, Range',
       'Access-Control-Max-Age': '86400',
@@ -61,8 +74,9 @@ function errorResponse(
   errorType: string,
   origin: string,
 ): Response {
+  console.error(errorType, error)
   return new Response(
-    JSON.stringify({ error: errorType, message: String(error) }),
+    JSON.stringify({ error: errorType, message: 'An internal error occurred' }),
     {
       status: 502,
       headers: {
@@ -73,20 +87,21 @@ function errorResponse(
   )
 }
 
-function forbiddenResponse(message = 'Forbidden', origin?: string): Response {
-  const headers: Record<string, string> = { 'Content-Type': 'text/plain' }
-  if (origin && isOriginAllowed(origin)) {
-    headers['Access-Control-Allow-Origin'] = origin
-  }
-  return new Response(message, { status: 403, headers })
+function forbiddenResponse(message = 'Forbidden'): Response {
+  return new Response(message, {
+    status: 403,
+    headers: { 'Content-Type': 'text/plain' },
+  })
 }
 
-function badRequestResponse(message: string, origin?: string): Response {
-  const headers: Record<string, string> = { 'Content-Type': 'text/plain' }
-  if (origin && isOriginAllowed(origin)) {
-    headers['Access-Control-Allow-Origin'] = origin
-  }
-  return new Response(message, { status: 400, headers })
+function badRequestResponse(message: string, origin: string): Response {
+  return new Response(message, {
+    status: 400,
+    headers: {
+      'Content-Type': 'text/plain',
+      'Access-Control-Allow-Origin': origin,
+    },
+  })
 }
 
 // ============================================================================
@@ -128,8 +143,7 @@ async function proxyExternalUrl(
 async function handleDownloadInfo(url: URL, origin: string): Promise<Response> {
   const xmlUrl = url.searchParams.get('url')
   if (!xmlUrl) return badRequestResponse('Missing url parameter', origin)
-  if (!isExternalUrlAllowed(xmlUrl))
-    return forbiddenResponse('URL not allowed', origin)
+  if (!isExternalUrlAllowed(xmlUrl)) return forbiddenResponse('URL not allowed')
 
   try {
     return await proxyExternalUrl(xmlUrl, origin)
@@ -146,7 +160,7 @@ async function handleProxyAudio(
   const audioUrl = url.searchParams.get('url')
   if (!audioUrl) return badRequestResponse('Missing url parameter', origin)
   if (!isExternalUrlAllowed(audioUrl))
-    return forbiddenResponse('URL not allowed', origin)
+    return forbiddenResponse('URL not allowed')
 
   try {
     return await proxyExternalUrl(audioUrl, origin, 'audio/mpeg', request)
@@ -164,17 +178,15 @@ async function handleYandexApiProxy(
   const isPathAllowed = ALLOWED_PATH_PREFIXES.some((prefix) =>
     url.pathname.startsWith(prefix),
   )
-  if (!isPathAllowed) return forbiddenResponse('Path not allowed', origin)
+  if (!isPathAllowed) return forbiddenResponse('Path not allowed')
 
   const targetUrl = `${YANDEX_API_BASE}${url.pathname}${url.search}`
 
-  // Copy headers (excluding host and origin)
+  // Forward only necessary request headers (allowlist)
   const headers = new Headers()
-  for (const [key, value] of request.headers.entries()) {
-    const lowerKey = key.toLowerCase()
-    if (lowerKey !== 'host' && lowerKey !== 'origin') {
-      headers.set(key, value)
-    }
+  for (const name of FORWARDED_REQUEST_HEADERS) {
+    const value = request.headers.get(name)
+    if (value) headers.set(name, value)
   }
   // Pretend to be Android client - Yandex returns stable CDN hosts for mobile clients,
   // without this header we get dynamic storage hosts like s897sas.storage.yandex.net
@@ -187,8 +199,12 @@ async function handleYandexApiProxy(
       body: request.method !== 'GET' ? await request.text() : undefined,
     })
 
-    const responseHeaders = new Headers(response.headers)
+    const responseHeaders = new Headers()
     addCorsHeaders(responseHeaders, origin)
+    for (const name of FORWARDED_RESPONSE_HEADERS) {
+      const value = response.headers.get(name)
+      if (value) responseHeaders.set(name, value)
+    }
 
     return new Response(response.body, {
       status: response.status,
@@ -205,16 +221,17 @@ async function handleYandexApiProxy(
 // ============================================================================
 
 export default {
-  async fetch(request: Request): Promise<Response> {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const allowedOrigins = parseAllowedOrigins(env)
     const origin = request.headers.get('Origin') || ''
 
     // CORS preflight
     if (request.method === 'OPTIONS') {
-      return corsResponse(origin)
+      return corsResponse(origin, allowedOrigins)
     }
 
     // Check origin
-    if (!isOriginAllowed(origin)) {
+    if (!isOriginAllowed(origin, allowedOrigins)) {
       return forbiddenResponse()
     }
 

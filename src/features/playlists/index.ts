@@ -2,17 +2,27 @@
 export { usePlaylistsData } from './hooks/usePlaylistsData'
 export type { UsePlaylistsDataResult } from './hooks/usePlaylistsData'
 export { useYandexAuth } from './hooks/useYandexAuth'
+export type {
+  AuthError,
+  AuthState,
+  RestoreAttempt,
+} from './hooks/useYandexAuth'
 export { useBpmAnalyzer } from './hooks/useBpmAnalyzer'
 export { useBpmCache } from './hooks/useBpmCache'
-
-// Internal hooks (not typically used directly)
-export { usePlaylistsFetch } from './hooks/usePlaylistsFetch'
-export { usePlaylistsMutations } from './hooks/usePlaylistsMutations'
-export { usePlaylistsPagination } from './hooks/usePlaylistsPagination'
-export { usePlaylistsSelection } from './hooks/usePlaylistsSelection'
+export { useAudioPlayer } from './hooks/useAudioPlayer'
+export type { PlayerStatus, UseAudioPlayerResult } from './hooks/useAudioPlayer'
 
 // Lib
-export { YandexMusicAPI, getCoverUrl } from './lib/yandex-music-api'
+export {
+  YandexMusicAPI,
+  YandexApiError,
+  getCoverUrl,
+  joinArtists,
+} from './lib/yandex-music-api'
+export type { YandexApiErrorCategory } from './lib/yandex-music-api'
+
+// Components (public entry)
+export { AuthGate } from './components/AuthGate'
 
 // Types
 export type {

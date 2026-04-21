@@ -1,4 +1,5 @@
-import { useTheme, cn } from '@/shared'
+import { useTheme } from '../hooks/useTheme'
+import { cn } from '../lib/utils'
 
 interface ThemeToggleProps {
   className?: string

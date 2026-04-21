@@ -1,4 +1,4 @@
-import { cn } from '@/shared'
+import { cn } from '../../lib/utils'
 import * as React from 'react'
 
 interface ContainerProps {
