@@ -19,12 +19,6 @@ export default function Home() {
               href="/watchlog"
               icon="i-lucide-film"
             />
-            <ProjectCard
-              title="Playlists"
-              description="Sort Yandex Music liked tracks into playlists by BPM and mood."
-              href="/playlists"
-              icon="i-lucide-music"
-            />
           </div>
         </Container>
       </section>

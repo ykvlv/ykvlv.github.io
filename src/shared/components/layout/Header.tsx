@@ -17,7 +17,6 @@ export function Header() {
 
         <nav className="flex items-center gap-1" aria-label="Main navigation">
           <NavItem to="/watchlog">Watchlog</NavItem>
-          <NavItem to="/playlists">Playlists</NavItem>
           <ThemeToggle className="ml-2" />
         </nav>
       </Container>
