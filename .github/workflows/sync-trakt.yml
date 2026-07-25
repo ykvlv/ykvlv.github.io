@@ -1,4 +1,4 @@
-name: Sync Tract Watch History
+name: Sync Trakt Watch History
 
 on:
   schedule:
@@ -17,11 +17,12 @@ jobs:
         uses: oven-sh/setup-bun@v2
 
       - name: 📦 Install dependencies
-        run: bun install
+        run: bun install --frozen-lockfile
 
       - name: 🎬 Sync Trakt history to Gist
         run: bun run scripts/sync-trakt.ts
         env:
+          TZ: UTC
           TRAKT_CLIENT_ID: ${{ vars.TRAKT_CLIENT_ID }}
           TRAKT_CLIENT_SECRET: ${{ secrets.TRAKT_CLIENT_SECRET }}
           TRAKT_ACCESS_TOKEN: ${{ secrets.TRAKT_ACCESS_TOKEN }}

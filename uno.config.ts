@@ -1,14 +1,8 @@
-import {
-  defineConfig,
-  presetUno,
-  presetIcons,
-  transformerDirectives,
-  transformerVariantGroup,
-} from 'unocss'
+import { defineConfig, presetWind3, presetIcons } from 'unocss'
 
 export default defineConfig({
   presets: [
-    presetUno(),
+    presetWind3(),
     presetIcons({
       scale: 1.2,
       extraProperties: {
@@ -17,7 +11,6 @@ export default defineConfig({
       },
     }),
   ],
-  transformers: [transformerDirectives(), transformerVariantGroup()],
   theme: {
     colors: {
       background: 'hsl(var(--background))',
@@ -63,16 +56,28 @@ export default defineConfig({
       md: 'calc(var(--radius) - 2px)',
       sm: 'calc(var(--radius) - 4px)',
     },
+    fontFamily: {
+      sans: 'var(--font-sans)',
+      serif: 'var(--font-serif)',
+    },
   },
   shortcuts: {
     // Layout
     'container-main': 'max-w-[1148px] mx-auto px-4 sm:px-6 lg:px-8',
 
     // Interactive
-    'focus-ring':
-      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+    focusable:
+      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
     'card-hover':
       'hover:border-primary/30 hover:shadow-lg hover:shadow-primary/10',
+
+    // Surfaces
+    'card-surface': 'rounded-2xl border border-border bg-card',
+    'card-interactive':
+      'card-surface transition-all duration-200 card-hover focusable',
+
+    // Controls
+    'icon-button':
+      'p-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors focusable',
   },
-  safelist: ['animate-in', 'fade-in', 'slide-in-from-bottom-4'],
 })

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 
 type Theme = 'light' | 'dark' | 'system'
 
@@ -28,6 +28,7 @@ function applyTheme(theme: Theme) {
 
   root.classList.remove('light', 'dark')
   root.classList.add(effectiveTheme)
+  root.style.colorScheme = effectiveTheme
 
   // Update background color (overrides inline style from index.html)
   root.style.backgroundColor = bg
@@ -64,10 +65,5 @@ export function useTheme() {
     return () => mediaQuery.removeEventListener('change', handleChange)
   }, [theme])
 
-  const resolvedTheme = useMemo(
-    () => (theme === 'system' ? getSystemTheme() : theme),
-    [theme],
-  )
-
-  return { theme, setTheme, resolvedTheme }
+  return { theme, setTheme }
 }

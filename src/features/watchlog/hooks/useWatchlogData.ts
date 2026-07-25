@@ -1,14 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { WatchlogData } from '../types'
 
-const GIST_ID = import.meta.env.GIST_ID
-const GIST_FILENAME = import.meta.env.GIST_FILENAME
-
-if (!GIST_ID || !GIST_FILENAME) {
-  throw new Error(
-    'GIST_ID and GIST_FILENAME environment variables are required',
-  )
-}
+const { GIST_ID, GIST_FILENAME } = import.meta.env
 
 const GIST_RAW_URL = `https://gist.githubusercontent.com/raw/${GIST_ID}/${GIST_FILENAME}`
 

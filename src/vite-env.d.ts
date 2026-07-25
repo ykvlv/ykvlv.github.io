@@ -1,16 +1,12 @@
 /// <reference types="vite/client" />
 
+// Exposed via envPrefix in vite.config.ts, which also asserts they are set
+interface ImportMetaEnv {
+  readonly GIST_ID: string
+  readonly GIST_FILENAME: string
+}
+
 declare module 'virtual:uno.css' {
   const css: string
   export default css
-}
-
-declare module 'virtual:pwa-register' {
-  export function registerSW(options?: {
-    immediate?: boolean
-    onNeedRefresh?: () => void
-    onOfflineReady?: () => void
-    onRegistered?: (registration: ServiceWorkerRegistration | undefined) => void
-    onRegisterError?: (error: Error) => void
-  }): (reloadPage?: boolean) => Promise<void>
 }

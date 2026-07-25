@@ -27,12 +27,7 @@ export function WatchlogCard({ item }: WatchlogCardProps) {
       href={item.trakt_url}
       target="_blank"
       rel="noopener noreferrer"
-      className={cn(
-        'group block rounded-2xl overflow-hidden border border-border bg-card',
-        'transition-all duration-200',
-        'card-hover',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-      )}
+      className="group block overflow-hidden card-interactive"
     >
       {/* Poster with rating badge */}
       <div className="relative aspect-[2/3] bg-muted overflow-hidden">

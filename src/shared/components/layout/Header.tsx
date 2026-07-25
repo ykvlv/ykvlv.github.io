@@ -1,8 +1,8 @@
+import type { ReactNode } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { Container } from './Container'
 import { ThemeToggle } from '../ThemeToggle'
 import { cn } from '../../lib/utils'
-import * as React from 'react'
 
 export function Header() {
   return (
@@ -24,7 +24,7 @@ export function Header() {
   )
 }
 
-function NavItem({ to, children }: { to: string; children: React.ReactNode }) {
+function NavItem({ to, children }: { to: string; children: ReactNode }) {
   return (
     <NavLink
       to={to}
@@ -32,7 +32,7 @@ function NavItem({ to, children }: { to: string; children: React.ReactNode }) {
         cn(
           'px-3 py-2.5 text-sm font-medium rounded-xl transition-colors',
           'hover:bg-secondary hover:text-foreground',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          'focusable',
           isActive ? 'text-foreground bg-secondary' : 'text-muted-foreground',
         )
       }

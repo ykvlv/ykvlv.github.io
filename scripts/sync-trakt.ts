@@ -11,17 +11,16 @@
  * - Parallel API requests for performance
  */
 
-// @ts-expect-error - default export exists at runtime in Bun
 import libsodium from 'libsodium-wrappers'
 import { format } from 'date-fns'
-import {
-  formatWatchedAtAuto,
-  type WatchlogItem,
-  type WatchlogStats,
-  type CalendarItem,
-  type WatchlogData,
-  type EpisodeType,
-} from '@/features/watchlog'
+import { formatWatchedAtAuto } from '@/features/watchlog/lib/watched-date'
+import type {
+  WatchlogItem,
+  WatchlogStats,
+  CalendarItem,
+  WatchlogData,
+  EpisodeType,
+} from '@/features/watchlog/types'
 
 // ============================================================================
 // Constants
@@ -41,29 +40,23 @@ const OUTPUT_ITEMS_LIMIT = 20
 // Environment
 // ============================================================================
 
-const {
-  TRAKT_CLIENT_ID,
-  TRAKT_CLIENT_SECRET,
-  TRAKT_ACCESS_TOKEN,
-  TRAKT_REFRESH_TOKEN,
-  GIST_ID,
-  GIST_FILENAME,
-  GH_TOKEN,
-  GH_REPOSITORY,
-} = process.env
-
-if (
-  !TRAKT_CLIENT_ID ||
-  !TRAKT_CLIENT_SECRET ||
-  !TRAKT_ACCESS_TOKEN ||
-  !TRAKT_REFRESH_TOKEN ||
-  !GIST_ID ||
-  !GIST_FILENAME ||
-  !GH_TOKEN
-) {
-  console.error('Missing required environment variables')
-  process.exit(1)
+function requireEnv(name: string): string {
+  const value = process.env[name]
+  if (!value) {
+    console.error(`Missing required environment variable: ${name}`)
+    process.exit(1)
+  }
+  return value
 }
+
+const TRAKT_CLIENT_ID = requireEnv('TRAKT_CLIENT_ID')
+const TRAKT_CLIENT_SECRET = requireEnv('TRAKT_CLIENT_SECRET')
+const TRAKT_ACCESS_TOKEN = requireEnv('TRAKT_ACCESS_TOKEN')
+const TRAKT_REFRESH_TOKEN = requireEnv('TRAKT_REFRESH_TOKEN')
+const GIST_ID = requireEnv('GIST_ID')
+const GIST_FILENAME = requireEnv('GIST_FILENAME')
+const GH_TOKEN = requireEnv('GH_TOKEN')
+const GH_REPOSITORY = requireEnv('GH_REPOSITORY')
 
 // ============================================================================
 // Trakt API Types
@@ -256,7 +249,7 @@ class TraktClient {
       )
     }
 
-    const data: TraktTokenResponse = await response.json()
+    const data = (await response.json()) as TraktTokenResponse
     console.log('Trakt tokens refreshed successfully')
     return data
   }
@@ -270,7 +263,7 @@ class TraktClient {
       throw new Error(`Trakt API error: ${response.status} - ${endpoint}`)
     }
 
-    return await response.json()
+    return (await response.json()) as T
   }
 
   async getHistory(): Promise<TraktHistoryItem[]> {
@@ -680,10 +673,6 @@ interface GitHubPublicKey {
 }
 
 async function getRepoPublicKey(): Promise<GitHubPublicKey> {
-  if (!GH_REPOSITORY) {
-    throw new Error('GH_REPOSITORY required for secrets update')
-  }
-
   const response = await fetch(
     `${GITHUB_API_BASE}/repos/${GH_REPOSITORY}/actions/secrets/public-key`,
     {
@@ -700,7 +689,7 @@ async function getRepoPublicKey(): Promise<GitHubPublicKey> {
     throw new Error(`Failed to get public key: ${response.status} - ${body}`)
   }
 
-  return response.json()
+  return (await response.json()) as GitHubPublicKey
 }
 
 async function encryptSecret(
@@ -750,11 +739,6 @@ async function updateGitHubSecret(
 async function updateGitHubTokenSecrets(
   tokens: TraktTokenResponse,
 ): Promise<void> {
-  if (!GH_REPOSITORY) {
-    console.warn('Skipping secrets update: GH_REPOSITORY not set')
-    return
-  }
-
   const publicKey = await getRepoPublicKey()
   await updateGitHubSecret('TRAKT_ACCESS_TOKEN', tokens.access_token, publicKey)
   await updateGitHubSecret(

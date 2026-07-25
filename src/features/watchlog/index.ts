@@ -7,13 +7,7 @@ export { WatchlogCard } from './components/WatchlogCard'
 export { useWatchlogData } from './hooks/useWatchlogData'
 
 // Lib
-export {
-  formatWatchedAt,
-  formatWatchedAtAuto,
-  getGranularity,
-  parseWatchedAt,
-} from './lib/watched-date'
-export type { DateGranularity } from './lib/watched-date'
+export { formatWatchedAtAuto, parseWatchedAt } from './lib/watched-date'
 
 // Types
 export type {

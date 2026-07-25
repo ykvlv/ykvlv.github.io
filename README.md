@@ -11,19 +11,19 @@ React 19, TypeScript, Vite, UnoCSS, PWA (Workbox), Bun
 ### Watchlog
 
 ```
-Trakt API  →  sync-trakt.ts (daily cron)  →  GitHub Gist  →  Frontend
+Trakt API  ->  sync-trakt.ts (daily cron)  ->  GitHub Gist  ->  Frontend
 ```
 
-Movie and TV watch history synced from Trakt. No backend — a daily cron script fetches history, ratings, and upcoming calendar from Trakt API, saves everything to a public GitHub Gist, and the frontend reads from the raw Gist URL.
+Movie and TV watch history synced from Trakt. No backend: a daily cron script fetches history, ratings, and upcoming calendar from Trakt API, saves everything to a public GitHub Gist, and the frontend reads from the raw Gist URL.
 
-- **Recently watched** — last 20 items with posters, ratings, and relative dates ("2d ago", "3mo ago"). Consecutive episodes from the same season are grouped into a single card
-- **My Premieres** — horizontal scrollable timeline of upcoming episodes and movies. Cards are tagged by episode type: season premiere, mid-season finale, series finale, etc.
-- **Stats** — total movies, shows, and hours watched
+- **Recently watched** - last 20 items with posters, ratings, and relative dates ("2d ago", "3mo ago"). Consecutive episodes from the same season are grouped into a single card
+- **My Premieres** - horizontal scrollable timeline of upcoming episodes and movies. Cards are tagged by episode type: season premiere, mid-season finale, series finale, etc.
+- **Stats** - total movies, shows, and hours watched
 - Token auto-refresh: when Trakt tokens expire, the sync script refreshes them and updates GitHub Actions secrets automatically
 
 ### PWA
 
-Installable, auto-updating, offline-capable. Service worker caches Gist data and Trakt poster images.
+Installable, auto-updating, offline-capable. Service worker caches Gist data, Trakt poster images, and fonts.
 
 ## Getting Started
 
@@ -50,10 +50,10 @@ src/
 └── layouts/            # App shell (Header + Footer)
 
 scripts/
-└── sync-trakt.ts       # Trakt → Gist sync script
+└── sync-trakt.ts       # Trakt to Gist sync script
 ```
 
-## Scripts & Workers
+## Scripts
 
 ### sync-trakt.ts
 
@@ -94,3 +94,5 @@ Copy `.env.example` to `.env` and fill in the values:
 | `GIST_FILENAME`       | Filename in Gist (e.g., `watchlog.json`)                                |
 | `GH_TOKEN`            | GitHub token (scopes: `gist`, `repo`)                                   |
 | `GH_REPOSITORY`       | Repository name (auto-set in GitHub Actions)                            |
+
+`GIST_ID` and `GIST_FILENAME` are also required to build: `vite.config.ts` fails the build when they are missing.

@@ -56,30 +56,30 @@ export function Timeline({ items }: TimelineProps) {
   const currentScrollRef = useRef(0)
   const animationRef = useRef<number | null>(null)
 
-  const animateTimelineScroll = useCallback(() => {
-    if (!timelineRef.current) return
-
-    const diff = targetScrollRef.current - currentScrollRef.current
-    if (Math.abs(diff) < 0.5) {
-      currentScrollRef.current = targetScrollRef.current
-      timelineRef.current.scrollLeft = targetScrollRef.current
-      animationRef.current = null
-      return
-    }
-
-    currentScrollRef.current += diff * LERP_FACTOR
-    timelineRef.current.scrollLeft = currentScrollRef.current
-    animationRef.current = requestAnimationFrame(animateTimelineScroll)
-  }, [])
-
   const syncTimelineScroll = useCallback(() => {
     if (!cardsRef.current) return
     targetScrollRef.current = cardsRef.current.scrollLeft
 
-    if (!animationRef.current) {
-      animationRef.current = requestAnimationFrame(animateTimelineScroll)
+    if (animationRef.current !== null) return
+
+    function step() {
+      if (!timelineRef.current) return
+
+      const diff = targetScrollRef.current - currentScrollRef.current
+      if (Math.abs(diff) < 0.5) {
+        currentScrollRef.current = targetScrollRef.current
+        timelineRef.current.scrollLeft = targetScrollRef.current
+        animationRef.current = null
+        return
+      }
+
+      currentScrollRef.current += diff * LERP_FACTOR
+      timelineRef.current.scrollLeft = currentScrollRef.current
+      animationRef.current = requestAnimationFrame(step)
     }
-  }, [animateTimelineScroll])
+
+    animationRef.current = requestAnimationFrame(step)
+  }, [])
 
   useEffect(() => {
     const ref = cardsRef.current
@@ -143,7 +143,13 @@ export function Timeline({ items }: TimelineProps) {
         )}
 
         {/* Scrollable cards */}
-        <div ref={cardsRef} className="overflow-x-auto scrollbar-none">
+        <div
+          ref={cardsRef}
+          className="overflow-x-auto scrollbar-none focusable rounded-2xl"
+          tabIndex={0}
+          role="group"
+          aria-label="Upcoming premieres, scrollable"
+        >
           {/* py-4 for the shadow at the bottom. not pb-4 to keep the timeline buttons centered */}
           <div className="flex gap-3 min-w-max py-4">
             {sortedDates.map((date) => (
@@ -193,7 +199,7 @@ function ScrollButton({ direction, onClick, enabled }: ScrollButtonProps) {
         'w-10 h-10 flex items-center justify-center',
         'rounded-full bg-background/80 backdrop-blur-sm border border-border shadow-lg',
         'transition-all duration-200',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        'focusable',
         enabled
           ? 'opacity-0 group-hover/scroll:opacity-100 hover:bg-secondary hover:border-primary/30'
           : 'opacity-0 pointer-events-none',
@@ -273,12 +279,7 @@ const TimelineCard = memo(function TimelineCard({
       href={item.trakt_url}
       target="_blank"
       rel="noopener noreferrer"
-      className={cn(
-        'group block w-36 rounded-2xl overflow-hidden border border-border bg-card',
-        'transition-all duration-200',
-        'card-hover',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-      )}
+      className="group block w-36 overflow-hidden card-interactive"
     >
       {/* Poster */}
       <div className="aspect-[2/3] bg-muted overflow-hidden relative">

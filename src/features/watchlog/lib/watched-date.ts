@@ -15,7 +15,7 @@ import {
   getISOWeekYear,
   isToday,
   isYesterday,
-  setISOWeek,
+  parseISO,
 } from 'date-fns'
 
 export type DateGranularity = 'day' | 'week' | 'month' | 'year'
@@ -88,24 +88,17 @@ function getRepresentativeDate(
 ): Date {
   switch (granularity) {
     case 'day':
-      return new Date(watchedAt + 'T00:00:00Z')
+      return parseISO(watchedAt)
 
-    case 'week': {
-      const match = watchedAt.match(PATTERNS.week)
-      if (!match) return new Date(watchedAt)
-      const [, yearStr, weekStr] = match
-      const year = parseInt(yearStr, 10)
-      const week = parseInt(weekStr, 10)
-      // Get Thursday of that week (middle of week)
-      const weekStart = setISOWeek(new Date(year, 0, 4), week)
-      return new Date(weekStart.getTime() + 3 * 24 * 60 * 60 * 1000)
-    }
+    // ISO week date: -4 is Thursday, the middle of the week
+    case 'week':
+      return parseISO(`${watchedAt}-4`)
 
     case 'month':
-      return new Date(watchedAt + '-15T00:00:00Z')
+      return parseISO(`${watchedAt}-15`)
 
     case 'year':
-      return new Date(watchedAt + '-07-01T00:00:00Z')
+      return parseISO(`${watchedAt}-07-01`)
   }
 }
 

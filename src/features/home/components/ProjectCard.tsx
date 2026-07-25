@@ -16,12 +16,7 @@ export function ProjectCard({
   icon,
   external = false,
 }: ProjectCardProps) {
-  const cardClasses = cn(
-    'group block p-6 rounded-2xl border border-border bg-card',
-    'transition-all duration-200',
-    'card-hover',
-    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-  )
+  const cardClasses = 'group block p-6 card-interactive'
 
   const content = (
     <div className="flex items-start justify-between">

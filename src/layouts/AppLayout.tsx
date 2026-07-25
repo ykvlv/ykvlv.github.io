@@ -3,7 +3,7 @@ import { Header, Footer } from '@/shared'
 
 export function AppLayout() {
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-dvh">
       <Header />
       <main className="flex-1">
         <Outlet />

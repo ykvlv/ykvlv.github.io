@@ -5,9 +5,16 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#F7F5F2" />
+    <meta name="color-scheme" content="light dark" />
     <meta name="description" content="personal website" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>ykvlv</title>
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ykvlv" />
+    <meta property="og:title" content="ykvlv" />
+    <meta property="og:description" content="personal website" />
+    <meta property="og:url" content="https://www.ykvlv.dev/" />
   </head>
   <body>
     <script>
@@ -22,6 +29,7 @@
         // colors must match src/hooks/useTheme.ts
         const bg = theme === 'dark' ? '#0A0E14' : '#F7F5F2'
         document.documentElement.classList.add(theme)
+        document.documentElement.style.colorScheme = theme
         document.documentElement.style.backgroundColor = bg
         document.body.style.backgroundColor = bg
         const meta = document.querySelector('meta[name="theme-color"]')
