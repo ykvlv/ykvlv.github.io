@@ -282,6 +282,8 @@ interface ModelDelta {
 }
 
 interface OpenRouterResponse {
+  /** Which upstream OpenRouter routed to; voice regressions correlate with it */
+  provider?: string
   choices?: {
     message: { content: string }
     finish_reason: string
@@ -373,8 +375,7 @@ async function extractDelta(
         },
       },
       reasoning: { effort: REASONING_EFFORT },
-      // Explicit default: anything lower makes Gemini 3 loop.
-      temperature: 1,
+      // No temperature: Gemini is tuned for its default, anything else loops.
     }),
   })
   if (!response.ok) {
@@ -400,7 +401,8 @@ async function extractDelta(
     const reasoning = usage.completion_tokens_details?.reasoning_tokens
     console.log(
       `Tokens: ${usage.prompt_tokens} in, ${usage.completion_tokens} out` +
-        (reasoning === undefined ? '' : ` (${reasoning} of it thinking)`),
+        (reasoning === undefined ? '' : ` (${reasoning} of it thinking)`) +
+        (data.provider ? ` via ${data.provider}` : ''),
     )
   }
 
