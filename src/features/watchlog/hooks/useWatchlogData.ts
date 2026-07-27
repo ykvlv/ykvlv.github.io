@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import type { WatchlogData } from '../types'
 
-const { GIST_ID, GIST_FILENAME } = import.meta.env
+const { GIST_ID, GIST_FILENAME_WATCHLOG } = import.meta.env
 
-const GIST_RAW_URL = `https://gist.githubusercontent.com/raw/${GIST_ID}/${GIST_FILENAME}`
+const GIST_RAW_URL = `https://gist.githubusercontent.com/raw/${GIST_ID}/${GIST_FILENAME_WATCHLOG}`
 
 interface UseWatchlogDataResult {
   data?: WatchlogData

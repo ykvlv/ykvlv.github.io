@@ -22,12 +22,11 @@ jobs:
       - name: 🎬 Sync Trakt history to Gist
         run: bun run scripts/sync-trakt.ts
         env:
-          TZ: UTC
           TRAKT_CLIENT_ID: ${{ vars.TRAKT_CLIENT_ID }}
           TRAKT_CLIENT_SECRET: ${{ secrets.TRAKT_CLIENT_SECRET }}
           TRAKT_ACCESS_TOKEN: ${{ secrets.TRAKT_ACCESS_TOKEN }}
           TRAKT_REFRESH_TOKEN: ${{ secrets.TRAKT_REFRESH_TOKEN }}
           GIST_ID: ${{ vars.GIST_ID }}
-          GIST_FILENAME: ${{ vars.GIST_FILENAME }}
+          GIST_FILENAME_WATCHLOG: ${{ vars.GIST_FILENAME_WATCHLOG }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           GH_REPOSITORY: ${{ github.repository }}

@@ -7,7 +7,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 import { manifest } from './pwa-manifest.ts'
 
 // Exposed to client code via envPrefix and read by the watchlog hook
-const REQUIRED_ENV = ['GIST_ID', 'GIST_FILENAME']
+const REQUIRED_ENV = ['GIST_ID', 'GIST_FILENAME_WATCHLOG']
 
 // Copy index.html to 404.html for SPA routing on GitHub Pages
 function spa404Plugin(): Plugin {

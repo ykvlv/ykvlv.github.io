@@ -15,3 +15,4 @@ export { useTheme } from './hooks/useTheme'
 
 // Lib
 export { cn } from './lib/utils'
+export { civilDate } from './lib/zoned-date'

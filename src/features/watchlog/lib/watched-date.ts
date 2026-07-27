@@ -6,17 +6,14 @@
  * - "2025-W02"    (YYYY-Wnn)   → week  (7-29 days ago)
  * - "2025-01"     (YYYY-MM)    → month (30-364 days ago)
  * - "2025"        (YYYY)       → year  (365+ days ago)
+ *
+ * Both sides speak zoned dates (see @/shared/lib/zoned-date), so the day the
+ * script writes and the day the frontend calls "Today" are the same day for
+ * every visitor.
  */
 
-import {
-  differenceInDays,
-  format,
-  getISOWeek,
-  getISOWeekYear,
-  isToday,
-  isYesterday,
-  parseISO,
-} from 'date-fns'
+import { differenceInCalendarDays, getISOWeek, getISOWeekYear } from 'date-fns'
+import { civilDate, zonedDate } from '@/shared/lib/zoned-date'
 
 export type DateGranularity = 'day' | 'week' | 'month' | 'year'
 
@@ -37,30 +34,33 @@ export function getGranularity(daysAgo: number): DateGranularity {
 // Formatting (Script-side)
 // ============================================================================
 
+/** `day` is `YYYY-MM-DD`; the slices below depend on that shape. */
 export function formatWatchedAt(
-  date: Date,
+  day: string,
   granularity: DateGranularity,
 ): string {
   switch (granularity) {
     case 'day':
-      return format(date, 'yyyy-MM-dd')
-    case 'week':
-      return `${getISOWeekYear(date)}-W${String(getISOWeek(date)).padStart(2, '0')}`
+      return day
+    case 'week': {
+      const civil = civilDate(day)
+      return `${getISOWeekYear(civil)}-W${String(getISOWeek(civil)).padStart(2, '0')}`
+    }
     case 'month':
-      return format(date, 'yyyy-MM')
+      return day.slice(0, 7)
     case 'year':
-      return format(date, 'yyyy')
+      return day.slice(0, 4)
   }
 }
 
 export function formatWatchedAtAuto(
   isoTimestamp: string,
-  referenceDate: Date = new Date(),
+  referenceInstant: Date = new Date(),
 ): string {
-  const date = new Date(isoTimestamp)
-  const daysAgo = differenceInDays(referenceDate, date)
-  const granularity = getGranularity(daysAgo)
-  return formatWatchedAt(date, granularity)
+  const day = zonedDate(new Date(isoTimestamp))
+  const today = zonedDate(referenceInstant)
+  const daysAgo = differenceInCalendarDays(civilDate(today), civilDate(day))
+  return formatWatchedAt(day, getGranularity(daysAgo))
 }
 
 // ============================================================================
@@ -88,37 +88,36 @@ function getRepresentativeDate(
 ): Date {
   switch (granularity) {
     case 'day':
-      return parseISO(watchedAt)
+      return civilDate(watchedAt)
 
     // ISO week date: -4 is Thursday, the middle of the week
     case 'week':
-      return parseISO(`${watchedAt}-4`)
+      return civilDate(`${watchedAt}-4`)
 
     case 'month':
-      return parseISO(`${watchedAt}-15`)
+      return civilDate(`${watchedAt}-15`)
 
     case 'year':
-      return parseISO(`${watchedAt}-07-01`)
+      return civilDate(`${watchedAt}-07-01`)
   }
 }
 
 export function parseWatchedAt(watchedAt: string): string {
   const granularity = detectGranularity(watchedAt)
   const date = getRepresentativeDate(watchedAt, granularity)
-  const now = new Date()
+  const today = civilDate(zonedDate(new Date()))
+  const days = differenceInCalendarDays(today, date)
 
   if (granularity === 'day') {
-    if (isToday(date)) return 'Today'
-    if (isYesterday(date)) return 'Yesterday'
-    const days = differenceInDays(now, date)
+    // <= rather than ===: a browser clock running behind must still say Today.
+    if (days <= 0) return 'Today'
+    if (days === 1) return 'Yesterday'
     if (days < 7) return `${days}d ago`
     // Fallback for old data
     if (days < 30) return `${Math.floor(days / 7)}w ago`
     if (days < 365) return `${Math.floor(days / 30)}mo ago`
     return `${Math.floor(days / 365)}y ago`
   }
-
-  const days = differenceInDays(now, date)
 
   if (granularity === 'week') {
     const weeks = Math.max(1, Math.round(days / 7))

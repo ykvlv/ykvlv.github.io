@@ -1,3 +1,4 @@
+import { formatDistanceToNowStrict } from 'date-fns'
 import { Skeleton } from '@/shared'
 import {
   useWatchlogData,
@@ -15,11 +16,8 @@ export default function WatchlogContent() {
       {data?.updated_at && (
         <p className="-mt-10 mb-12 text-xs text-muted-foreground">
           Last updated:{' '}
-          {new Date(data.updated_at).toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
+          {formatDistanceToNowStrict(new Date(data.updated_at), {
+            addSuffix: true,
           })}
         </p>
       )}

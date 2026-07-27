@@ -12,8 +12,8 @@
  */
 
 import libsodium from 'libsodium-wrappers'
-import { format } from 'date-fns'
 import { formatWatchedAtAuto } from '@/features/watchlog/lib/watched-date'
+import { zonedDate, shiftDate } from '@/shared/lib/zoned-date'
 import type {
   WatchlogItem,
   WatchlogStats,
@@ -34,7 +34,7 @@ const HISTORY_LIMIT = 100
 // Calendar lookahead period
 const CALENDAR_DAYS = 365
 // Max items displayed on the frontend
-const OUTPUT_ITEMS_LIMIT = 20
+const OUTPUT_ITEMS_LIMIT = 30
 
 // ============================================================================
 // Environment
@@ -54,7 +54,7 @@ const TRAKT_CLIENT_SECRET = requireEnv('TRAKT_CLIENT_SECRET')
 const TRAKT_ACCESS_TOKEN = requireEnv('TRAKT_ACCESS_TOKEN')
 const TRAKT_REFRESH_TOKEN = requireEnv('TRAKT_REFRESH_TOKEN')
 const GIST_ID = requireEnv('GIST_ID')
-const GIST_FILENAME = requireEnv('GIST_FILENAME')
+const GIST_FILENAME_WATCHLOG = requireEnv('GIST_FILENAME_WATCHLOG')
 const GH_TOKEN = requireEnv('GH_TOKEN')
 const GH_REPOSITORY = requireEnv('GH_REPOSITORY')
 
@@ -337,14 +337,15 @@ class TraktClient {
   }
 
   async getRawCalendar(): Promise<RawCalendar> {
-    const today = format(new Date(), 'yyyy-MM-dd')
+    // A window from today may lose some episodes
+    const start = shiftDate(zonedDate(new Date()), -1)
 
     const [episodes, movies] = await Promise.all([
       this.get<TraktCalendarEpisode[]>(
-        `/calendars/my/shows/${today}/${CALENDAR_DAYS}?extended=full,images`,
+        `/calendars/my/shows/${start}/${CALENDAR_DAYS + 1}?extended=full,images`,
       ),
       this.get<TraktCalendarMovie[]>(
-        `/calendars/my/movies/${today}/${CALENDAR_DAYS}?extended=images`,
+        `/calendars/my/movies/${start}/${CALENDAR_DAYS + 1}?extended=images`,
       ),
     ])
 
@@ -544,7 +545,7 @@ function groupCalendarEpisodes(
   const groups = new Map<string, GroupedCalendarEpisode>()
 
   for (const ep of episodes) {
-    const date = format(new Date(ep.first_aired), 'yyyy-MM-dd')
+    const date = zonedDate(new Date(ep.first_aired))
     const key = `${date}|${ep.show.ids.slug}|${ep.episode.season}`
     const epType = ep.episode.episode_type
 
@@ -593,6 +594,7 @@ function formatEpisodeSubtitle(season: number, episodes: number[]): string {
 function enrichCalendar(
   rawCalendar: RawCalendar,
   seasonsMap: Map<string, Map<number, TraktSeason>>,
+  today: string,
 ): CalendarItem[] {
   const groupedEpisodes = groupCalendarEpisodes(rawCalendar.episodes)
 
@@ -633,7 +635,10 @@ function enrichCalendar(
     }),
   ]
 
-  return items.sort((a, b) => a.date.localeCompare(b.date))
+  // The request reaches a day back, so trim the past by zoned date here.
+  return items
+    .filter((item) => item.date >= today)
+    .sort((a, b) => a.date.localeCompare(b.date))
 }
 
 // ============================================================================
@@ -650,7 +655,7 @@ async function updateGist(data: WatchlogData): Promise<void> {
     },
     body: JSON.stringify({
       files: {
-        [GIST_FILENAME]: {
+        [GIST_FILENAME_WATCHLOG]: {
           content: JSON.stringify(data, null, 2),
         },
       },
@@ -799,7 +804,11 @@ async function main() {
     0,
     OUTPUT_ITEMS_LIMIT,
   )
-  const calendar = enrichCalendar(rawCalendar, seasonsMap)
+  const calendar = enrichCalendar(
+    rawCalendar,
+    seasonsMap,
+    zonedDate(referenceDate),
+  )
   console.log(`Output: ${items.length} items, ${calendar.length} calendar`)
 
   // Phase 5: Update Gist

@@ -21,6 +21,18 @@ Movie and TV watch history synced from Trakt. No backend: a daily cron script fe
 - **Stats** - total movies, shows, and hours watched
 - Token auto-refresh: when Trakt tokens expire, the sync script refreshes them and updates GitHub Actions secrets automatically
 
+### Whatsnext
+
+```
+Telegram channels  ->  sync-whatsnext.ts (daily cron)  ->  LLM  ->  GitHub Gist  ->  Frontend
+```
+
+Personal event listing distilled from public Telegram channels. A daily cron
+script scrapes channel web previews past each channel's cursor, hands fresh
+posts to an LLM (Gemini via OpenRouter) that turns announcements into listing
+entries with a deadpan editorial voice, and merges the returned delta into the
+Gist.
+
 ### PWA
 
 Installable, auto-updating, offline-capable. Service worker caches Gist data, Trakt poster images, and fonts.
@@ -41,7 +53,8 @@ bun run format     # Format with Prettier
 src/
 ├── features/           # Feature modules (isolated by domain)
 │   ├── home/           # Landing page components
-│   └── watchlog/       # Watchlog components, hooks, types
+│   ├── watchlog/       # Watchlog components, hooks, types
+│   └── whatsnext/      # Whatsnext types (UI in progress)
 ├── shared/             # Shared UI, hooks, utilities
 │   ├── components/     # Layout, UI primitives
 │   ├── hooks/          # useTheme
@@ -50,7 +63,9 @@ src/
 └── layouts/            # App shell (Header + Footer)
 
 scripts/
-└── sync-trakt.ts       # Trakt to Gist sync script
+├── sync-trakt.ts       # Trakt to Gist sync script
+├── sync-whatsnext.ts   # Telegram to LLM to Gist sync script
+└── whatsnext-prompt.md # Every word the LLM reads
 ```
 
 ## Scripts
@@ -65,34 +80,27 @@ Syncs Trakt data to GitHub Gist:
 - Auto-refreshes expired tokens (updates GitHub secrets)
 - Outputs top 20 items + stats + calendar to Gist
 
-Run manually: `bun run scripts/sync-trakt.ts`
+### sync-whatsnext.ts
+
+Turns public Telegram channel previews into an event listing:
+
+- Scrapes `t.me/s/<channel>` pages past each channel's cursor
+- Asks an LLM (via OpenRouter) to turn fresh posts into listing entries
+- Merges the returned delta: upserts, verified cancellations, expiry by date
+- Writes events and cursors to the Gist in one atomic PATCH
 
 ## Deployment
 
-Two GitHub Actions workflows handle deployment:
+Three GitHub Actions workflows handle deployment:
 
-| Workflow         | Trigger        | Action                         |
-| ---------------- | -------------- | ------------------------------ |
-| `deploy.yml`     | Push to `main` | Build & deploy to GitHub Pages |
-| `sync-trakt.yml` | Cron (daily)   | Sync watch history to Gist     |
-
-Required secrets: `GH_TOKEN`, `TRAKT_*`
-
-Required variables: `GIST_ID`, `GIST_FILENAME`
+| Workflow             | Trigger        | Action                         |
+| -------------------- | -------------- | ------------------------------ |
+| `deploy.yml`         | Push to `main` | Build & deploy to GitHub Pages |
+| `sync-trakt.yml`     | Cron (daily)   | Sync watch history to Gist     |
+| `sync-whatsnext.yml` | Cron (daily)   | Sync Telegram events to Gist   |
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` and fill in the values:
-
-| Variable              | Description                                                             |
-| --------------------- | ----------------------------------------------------------------------- |
-| `TRAKT_CLIENT_ID`     | Trakt OAuth app ID ([create here](https://trakt.tv/oauth/applications)) |
-| `TRAKT_CLIENT_SECRET` | Trakt OAuth app secret                                                  |
-| `TRAKT_ACCESS_TOKEN`  | User access token                                                       |
-| `TRAKT_REFRESH_TOKEN` | Token for auto-refresh                                                  |
-| `GIST_ID`             | GitHub Gist ID for watchlog storage                                     |
-| `GIST_FILENAME`       | Filename in Gist (e.g., `watchlog.json`)                                |
-| `GH_TOKEN`            | GitHub token (scopes: `gist`, `repo`)                                   |
-| `GH_REPOSITORY`       | Repository name (auto-set in GitHub Actions)                            |
-
-`GIST_ID` and `GIST_FILENAME` are also required to build: `vite.config.ts` fails the build when they are missing.
+Copy `.env.example` to `.env` and fill in the blanks. The same names are used in
+GitHub Actions: filled in the example means repo variable, empty means repo secret.
+Naming rules and per-variable notes live in the file itself.

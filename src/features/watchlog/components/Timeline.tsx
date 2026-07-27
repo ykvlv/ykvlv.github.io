@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, useCallback, useMemo, memo } from 'react'
 import type { CalendarItem, EpisodeType } from '../types'
-import { cn } from '@/shared'
+import { cn, civilDate } from '@/shared'
 
 // Layout constants (must match Tailwind classes)
 const CARD_WIDTH_PX = 144 // w-36
@@ -25,11 +25,6 @@ function groupByDate(items: CalendarItem[]): Record<string, CalendarItem[]> {
     },
     {} as Record<string, CalendarItem[]>,
   )
-}
-
-function parseLocalDate(dateStr: string): Date {
-  const [year, month, day] = dateStr.split('-').map(Number)
-  return new Date(year, month - 1, day)
 }
 
 export function Timeline({ items }: TimelineProps) {
@@ -228,8 +223,7 @@ const TimelineSegment = memo(function TimelineSegment({
   itemCount,
   isLast,
 }: TimelineSegmentProps) {
-  const localDate = parseLocalDate(date)
-  const formattedDate = localDate.toLocaleDateString('en-US', {
+  const formattedDate = civilDate(date).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
   })
