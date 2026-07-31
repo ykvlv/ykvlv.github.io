@@ -477,7 +477,7 @@ function enrichItems(
     const episodes = group.episodes
 
     const year = seasonData?.first_aired
-      ? new Date(seasonData.first_aired).getFullYear()
+      ? Number(zonedDate(new Date(seasonData.first_aired)).slice(0, 4))
       : group.show.year
 
     const poster =

@@ -15,7 +15,7 @@
 import { differenceInCalendarDays, getISOWeek, getISOWeekYear } from 'date-fns'
 import { civilDate, zonedDate } from '@/shared/lib/zoned-date'
 
-export type DateGranularity = 'day' | 'week' | 'month' | 'year'
+type DateGranularity = 'day' | 'week' | 'month' | 'year'
 
 const THRESHOLDS = { day: 7, week: 30, month: 365 } as const
 
@@ -23,7 +23,7 @@ const THRESHOLDS = { day: 7, week: 30, month: 365 } as const
 // Granularity
 // ============================================================================
 
-export function getGranularity(daysAgo: number): DateGranularity {
+function getGranularity(daysAgo: number): DateGranularity {
   if (daysAgo < THRESHOLDS.day) return 'day'
   if (daysAgo < THRESHOLDS.week) return 'week'
   if (daysAgo < THRESHOLDS.month) return 'month'
@@ -35,10 +35,7 @@ export function getGranularity(daysAgo: number): DateGranularity {
 // ============================================================================
 
 /** `day` is `YYYY-MM-DD`; the slices below depend on that shape. */
-export function formatWatchedAt(
-  day: string,
-  granularity: DateGranularity,
-): string {
+function formatWatchedAt(day: string, granularity: DateGranularity): string {
   switch (granularity) {
     case 'day':
       return day

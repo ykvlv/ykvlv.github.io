@@ -9,6 +9,8 @@
  * - Delta merge: events the model does not mention are never touched
  * - Cursors live next to the events, so a failed run writes nothing and the
  *   next run re-reads the same posts
+ * - Photos are copied into a release asset, since Telegram's own urls expire,
+ *   and measured on the way so the frontend can reserve the tile's photo box
  */
 
 import { readFile } from 'node:fs/promises'
@@ -21,7 +23,11 @@ import { zonedDate, withWeekday } from '@/shared/lib/zoned-date'
 
 const TELEGRAM_PREVIEW_BASE = 'https://t.me/s'
 const GITHUB_API_BASE = 'https://api.github.com'
+const GITHUB_UPLOADS_BASE = 'https://uploads.github.com'
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
+
+// One release holds every photo; the sweep keeps it under the 1000-asset cap.
+const MEDIA_RELEASE_TAG = 'whatsnext-media'
 
 const MODEL = 'google/gemini-3-flash-preview'
 const REASONING_EFFORT = 'high'
@@ -46,11 +52,21 @@ function requireEnv(name: string): string {
   return value
 }
 
-const CHANNELS = requireEnv('WHATSNEXT_CHANNELS').split(',')
+const CHANNELS = requireEnv('WHATSNEXT_CHANNELS')
+  .split(',')
+  .map((c) => c.trim())
+  .filter(Boolean)
 const OPENROUTER_API_KEY = requireEnv('OPENROUTER_API_KEY')
 const GIST_ID = requireEnv('GIST_ID')
 const GIST_FILENAME_WHATSNEXT = requireEnv('GIST_FILENAME_WHATSNEXT')
 const GH_TOKEN = requireEnv('GH_TOKEN')
+const GH_REPOSITORY = requireEnv('GH_REPOSITORY')
+
+const GH_HEADERS = {
+  Accept: 'application/vnd.github+json',
+  Authorization: `Bearer ${GH_TOKEN}`,
+  'X-GitHub-Api-Version': '2022-11-28',
+}
 
 // ============================================================================
 // Telegram Preview
@@ -100,11 +116,10 @@ function parsePosts(html: string): TelegramPost[] {
       const published = /<time datetime="([^"]+)"/.exec(chunk)?.[1]
       if (!Number.isFinite(num) || !published) return []
 
-      // First text block only: link previews carry the same class further down.
-      const body =
-        /class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/.exec(
-          chunk,
-        )
+      // A reply repeats the quoted post under the same tgme class, above its own
+      const body = /class="[^"]*js-message_text"[^>]*>([\s\S]*?)<\/div>/.exec(
+        chunk,
+      )
 
       // The media wrapper specifically: the chunk also holds avatar and emoji images.
       const media =
@@ -233,13 +248,13 @@ function arrayOf(properties: Record<string, unknown>): Record<string, unknown> {
 }
 
 // Key order matters: the model writes fields in this order, prose before dates.
-const EVENT_PROPERTIES = {
+const ENTRY_PROPERTIES = {
   source_posts: SOURCE_POSTS_SCHEMA,
   title: { type: 'string' },
   description: { type: 'string' },
   date: { type: 'string' },
   date_end: { type: ['string', 'null'] },
-} satisfies Record<keyof Omit<ModelEvent, 'id'>, unknown>
+} satisfies Record<keyof Omit<ModelEntry, 'id'>, unknown>
 
 // post_notes first: the model accounts for every post before writing entries.
 const RESPONSE_SCHEMA = objectSchema({
@@ -248,18 +263,18 @@ const RESPONSE_SCHEMA = objectSchema({
     says: { type: 'string' },
     verdict: { type: 'string' },
   }),
-  events_to_write: arrayOf({
+  entries_to_write: arrayOf({
     id: { type: ['string', 'null'] },
-    ...EVENT_PROPERTIES,
+    ...ENTRY_PROPERTIES,
   }),
-  events_to_cancel: arrayOf({
+  entries_to_cancel: arrayOf({
     id: { type: 'string' },
     source_posts: SOURCE_POSTS_SCHEMA,
     reason: { type: 'string' },
   }),
 })
 
-interface ModelEvent {
+interface ModelEntry {
   /** Existing entry this rewrites, null for a new one */
   id: string | null
   source_posts: string[]
@@ -277,8 +292,8 @@ interface PostNote {
 
 interface ModelDelta {
   post_notes: PostNote[]
-  events_to_write: ModelEvent[]
-  events_to_cancel: { id: string; source_posts: string[]; reason: string }[]
+  entries_to_write: ModelEntry[]
+  entries_to_cancel: { id: string; source_posts: string[]; reason: string }[]
 }
 
 interface OpenRouterResponse {
@@ -301,7 +316,11 @@ interface OpenRouterResponse {
 // ============================================================================
 
 // Merge and expiry compare dates as strings, so exact YYYY-MM-DD only.
+// The regex alone admits 2026-13-45, which as a string never expires,
+// so round-trip the value through a real calendar too.
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+const isRealDate = (d: string) =>
+  DATE_RE.test(d) && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === d
 
 async function readPrompt(): Promise<{ system: string; tail: string }> {
   const parts = (await readFile(PROMPT_FILE, 'utf8')).split(PROMPT_MARKER)
@@ -333,7 +352,7 @@ async function extractDelta(
   const input = {
     today: withWeekday(today),
     // Everything except photo, which the model must not know about.
-    existing_events: events.map(
+    existing_entries: events.map(
       ({ id, date, date_end, title, description, source_posts }) => ({
         id,
         date,
@@ -415,12 +434,16 @@ async function extractDelta(
       `Model returned ${delta.post_notes.length} post_notes for ${posts.length} posts`,
     )
   }
-  for (const event of delta.events_to_write) {
+  for (const entry of delta.entries_to_write) {
     if (
-      !DATE_RE.test(event.date) ||
-      (event.date_end !== null && !DATE_RE.test(event.date_end))
+      !isRealDate(entry.date) ||
+      (entry.date_end !== null && !isRealDate(entry.date_end))
     ) {
-      throw new Error(`Bad date in "${event.title}"`)
+      throw new Error(`Bad date in "${entry.title}"`)
+    }
+    // A reversed range reads as already expired and silently vanishes
+    if (entry.date_end !== null && entry.date_end < entry.date) {
+      throw new Error(`date_end before date in "${entry.title}"`)
     }
   }
 
@@ -433,17 +456,19 @@ async function extractDelta(
 
 function toStored(
   id: string,
-  event: ModelEvent,
+  entry: ModelEntry,
   photo?: string,
+  photoRatio?: number,
 ): WhatsnextEvent {
   return {
     id,
-    date: event.date,
-    ...(event.date_end && { date_end: event.date_end }),
-    title: event.title,
-    description: event.description,
-    source_posts: event.source_posts,
+    date: entry.date,
+    ...(entry.date_end && { date_end: entry.date_end }),
+    title: entry.title,
+    description: entry.description,
+    source_posts: entry.source_posts,
     ...(photo && { photo }),
+    ...(photoRatio && { photo_ratio: photoRatio }),
   }
 }
 
@@ -470,8 +495,8 @@ function applyDelta(
   // A post that produced exactly one entry lends it its photo; a digest that
   // produced five would put the same collage on all five.
   const yieldByPost = new Map<string, number>()
-  for (const event of delta.events_to_write) {
-    const post = event.source_posts[0]
+  for (const entry of delta.entries_to_write) {
+    const post = entry.source_posts[0]
     yieldByPost.set(post, (yieldByPost.get(post) ?? 0) + 1)
   }
 
@@ -484,21 +509,21 @@ function applyDelta(
     }
   }
 
-  for (const event of delta.events_to_write) {
-    const post = event.source_posts[0]
-    const known = event.id === null ? undefined : byId.get(event.id)
+  for (const entry of delta.entries_to_write) {
+    const post = entry.source_posts[0]
+    const known = entry.id === null ? undefined : byId.get(entry.id)
 
     // A new entry may only cite posts of this batch: posts are public input,
     // and a foreign id would mint into another channel's namespace.
     if (!known && !sent.has(post)) {
       console.warn(
-        `${event.title}: source post ${post} not in this batch, dropped`,
+        `${entry.title}: source post ${post} not in this batch, dropped`,
       )
       continue
     }
-    if (event.id !== null && !known) {
+    if (entry.id !== null && !known) {
       // Filed as new rather than dropped: a missing event is worse than a repeat.
-      console.warn(`No entry with id ${event.id}, filing it as new`)
+      console.warn(`No entry with id ${entry.id}, filing it as new`)
     }
 
     const id = known?.id ?? nextId(post, counters)
@@ -508,11 +533,12 @@ function applyDelta(
       known?.photo ??
       (yieldByPost.get(post) === 1 ? photoByPost.get(post) : undefined)
 
-    byId.set(id, toStored(id, event, photo))
+    // A photo arriving from Telegram is measured later, when it is copied into the release.
+    byId.set(id, toStored(id, entry, photo, known?.photo_ratio))
   }
 
   // Cancels last, so an explicit cancellation wins over a same-run rewrite.
-  for (const { id, source_posts } of delta.events_to_cancel) {
+  for (const { id, source_posts } of delta.entries_to_cancel) {
     const cancellers = new Set(source_posts.map((post) => post.split('/')[0]))
     const target = byId.get(id)
     if (!target) {
@@ -540,16 +566,211 @@ function applyDelta(
 }
 
 // ============================================================================
+// Release Media
+// ============================================================================
+
+// A Telegram CDN url embeds an expiring file_reference: most die within a day,
+// a dead one never revives, and re-rendering the post mints a different url
+// instead. So a photo is copied out on the run that first sees it - by the next
+// one its post is behind the cursor and the url is already gone. Release assets
+// rather than the repo, whose git history would carry every photo forever.
+
+const ASSET_BASE = `https://github.com/${GH_REPOSITORY}/releases/download/${MEDIA_RELEASE_TAG}/`
+
+interface ReleaseAsset {
+  id: number
+  name: string
+  created_at: string
+}
+
+// GitHub caps a release at 1000 assets. The rest is headroom: a run uploads
+// before it sweeps, so it must never meet the cap mid-copy.
+const ASSET_LIMIT = 900
+
+// GitHub rewrites some characters in an asset name, so the id separators go first.
+function assetName(eventId: string): string {
+  return `${eventId.replaceAll('/', '-').replaceAll('#', '-')}.jpg`
+}
+
+/** Id of the one media release, which this script only ever reads. */
+async function readMediaRelease(): Promise<number> {
+  const found = await fetch(
+    `${GITHUB_API_BASE}/repos/${GH_REPOSITORY}/releases/tags/${MEDIA_RELEASE_TAG}`,
+    { headers: GH_HEADERS },
+  )
+  if (!found.ok) {
+    throw new Error(
+      `${MEDIA_RELEASE_TAG} release: ${found.status} - ${await found.text()}`,
+    )
+  }
+  return ((await found.json()) as { id: number }).id
+}
+
+/**
+ * Width / height from a JPEG's own header, which is what Telegram serves.
+ * The frontend reserves the tile's photo box from this, so it must come from
+ * the bytes: a post's HTML publishes the shape of a single photo, but inside
+ * an album it publishes the collage crop instead of the photo.
+ */
+function jpegRatio(bytes: Uint8Array): number | undefined {
+  // Refuse anything else outright: the scan below would find marker-shaped
+  // bytes in a PNG too and answer with a shape nobody measured
+  if (bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff) return
+
+  // Every marker is 0xFF plus a code, then a big-endian length. SOFn holds
+  // height then width; the coding-table markers in that range hold neither.
+  for (let i = 2; i + 9 < bytes.length;) {
+    if (bytes[i] !== 0xff) {
+      i++
+      continue
+    }
+    const marker = bytes[i + 1]
+    if (
+      marker >= 0xc0 &&
+      marker <= 0xcf &&
+      marker !== 0xc4 &&
+      marker !== 0xc8 &&
+      marker !== 0xcc
+    ) {
+      const height = (bytes[i + 5] << 8) | bytes[i + 6]
+      const width = (bytes[i + 7] << 8) | bytes[i + 8]
+      return height > 0 ? Number((width / height).toFixed(3)) : undefined
+    }
+    i += 2 + ((bytes[i + 2] << 8) | bytes[i + 3])
+  }
+}
+
+/** Asset url and shape, or nothing once Telegram's copy is gone. */
+async function uploadPhoto(
+  releaseId: number,
+  name: string,
+  source: string,
+): Promise<{ url: string; ratio?: number } | undefined> {
+  const image = await fetch(source)
+  if (!image.ok) {
+    // Expired between the page render and here. The post is unreachable now, so
+    // the entry loses its picture rather than wedging every future run.
+    console.warn(`${name}: source photo ${image.status}, dropped`)
+    return undefined
+  }
+
+  const bytes = new Uint8Array(await image.arrayBuffer())
+  const response = await fetch(
+    `${GITHUB_UPLOADS_BASE}/repos/${GH_REPOSITORY}/releases/${releaseId}/assets?name=${name}`,
+    {
+      method: 'POST',
+      headers: {
+        ...GH_HEADERS,
+        'Content-Type': image.headers.get('content-type') ?? 'image/jpeg',
+      },
+      body: bytes,
+    },
+  )
+  if (!response.ok) {
+    const detail = await response.text()
+    // A run that dies before the gist write leaves the asset but not the
+    // advanced cursor, so the next run mints that id again. Throwing here
+    // would wedge every run after it on the same name.
+    if (response.status === 422 && detail.includes('already_exists')) {
+      console.warn(`${name}: already in the release, kept as is`)
+      return { url: `${ASSET_BASE}${name}`, ratio: jpegRatio(bytes) }
+    }
+    throw new Error(`GitHub API error: ${response.status} - ${detail}`)
+  }
+
+  const { browser_download_url } = (await response.json()) as {
+    browser_download_url: string
+  }
+  return { url: browser_download_url, ratio: jpegRatio(bytes) }
+}
+
+/** The events again, with every Telegram photo now pointing at the release. */
+async function rehostPhotos(
+  releaseId: number,
+  events: WhatsnextEvent[],
+): Promise<WhatsnextEvent[]> {
+  const rehosted: WhatsnextEvent[] = []
+  let copied = 0
+
+  for (const event of events) {
+    // Copied by an earlier run, so it is never re-read either: a photo older
+    // than photo_ratio keeps none, which is why the frontend tolerates that
+    if (!event.photo || event.photo.startsWith(ASSET_BASE)) {
+      rehosted.push(event)
+      continue
+    }
+
+    const photo = await uploadPhoto(releaseId, assetName(event.id), event.photo)
+    if (photo) copied++
+    rehosted.push({ ...event, photo: photo?.url, photo_ratio: photo?.ratio })
+  }
+
+  if (copied > 0) console.log(`Photos: ${copied} copied into the release`)
+  return rehosted
+}
+
+/** Every asset of the release, across as many pages as it takes. */
+async function readAssets(releaseId: number): Promise<ReleaseAsset[]> {
+  const assets: ReleaseAsset[] = []
+  for (let page = 1; ; page++) {
+    const response = await fetch(
+      `${GITHUB_API_BASE}/repos/${GH_REPOSITORY}/releases/${releaseId}/assets?per_page=100&page=${page}`,
+      { headers: GH_HEADERS },
+    )
+    if (!response.ok) {
+      throw new Error(
+        `GitHub API error: ${response.status} - ${await response.text()}`,
+      )
+    }
+    const batch = (await response.json()) as ReleaseAsset[]
+    assets.push(...batch)
+    if (batch.length < 100) return assets
+  }
+}
+
+/**
+ * Frees room once the release nears the cap and only then, oldest orphans
+ * first. Below the limit nothing is deleted: an orphan costs a slot and
+ * nothing else, while deleting one takes the last surviving copy of a photo
+ * with it, and an event dropped by mistake can be restored where its picture
+ * cannot.
+ */
+async function sweepAssets(
+  releaseId: number,
+  events: WhatsnextEvent[],
+): Promise<void> {
+  const assets = await readAssets(releaseId)
+  if (assets.length <= ASSET_LIMIT) return
+
+  const live = new Set(
+    events.flatMap((event) => (event.photo ? [assetName(event.id)] : [])),
+  )
+  const doomed = assets
+    .filter((asset) => !live.has(asset.name))
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    // Clamped: a negative end slices from the tail and would take every
+    // orphan but the newest
+    .slice(0, Math.max(0, assets.length - ASSET_LIMIT))
+
+  for (const asset of doomed) {
+    await fetch(
+      `${GITHUB_API_BASE}/repos/${GH_REPOSITORY}/releases/assets/${asset.id}`,
+      { method: 'DELETE', headers: GH_HEADERS },
+    )
+  }
+
+  console.log(
+    `Photos: ${assets.length} assets in the release, ${doomed.length} oldest orphans swept`,
+  )
+}
+
+// ============================================================================
 // Gist API
 // ============================================================================
 
 async function readGist(): Promise<WhatsnextData> {
   const response = await fetch(`${GITHUB_API_BASE}/gists/${GIST_ID}`, {
-    headers: {
-      Accept: 'application/vnd.github+json',
-      Authorization: `Bearer ${GH_TOKEN}`,
-      'X-GitHub-Api-Version': '2022-11-28',
-    },
+    headers: GH_HEADERS,
   })
 
   if (!response.ok) {
@@ -571,11 +792,7 @@ async function readGist(): Promise<WhatsnextData> {
 async function updateGist(data: WhatsnextData): Promise<void> {
   const response = await fetch(`${GITHUB_API_BASE}/gists/${GIST_ID}`, {
     method: 'PATCH',
-    headers: {
-      Accept: 'application/vnd.github+json',
-      Authorization: `Bearer ${GH_TOKEN}`,
-      'X-GitHub-Api-Version': '2022-11-28',
-    },
+    headers: GH_HEADERS,
     body: JSON.stringify({
       files: {
         [GIST_FILENAME_WHATSNEXT]: { content: JSON.stringify(data, null, 2) },
@@ -627,22 +844,26 @@ async function main(): Promise<void> {
 
     // Phase 3: Merge
     const known = new Set(state.events.map((event) => event.id))
-    for (const event of delta.events_to_write) {
-      const target = event.id !== null && known.has(event.id) ? event.id : 'new'
-      console.log(`  ${event.date}  ${event.title}  [${target}]`)
+    for (const entry of delta.entries_to_write) {
+      const target = entry.id !== null && known.has(entry.id) ? entry.id : 'new'
+      console.log(`  ${entry.date}  ${entry.title}  [${target}]`)
     }
-    const updated = delta.events_to_write.filter(
-      (event) => event.id !== null && known.has(event.id),
+    const updated = delta.entries_to_write.filter(
+      (entry) => entry.id !== null && known.has(entry.id),
     ).length
     console.log(
-      `Delta: ${delta.events_to_write.length - updated} new, ${updated} updated, ${delta.events_to_cancel.length} cancelled`,
+      `Delta: ${delta.entries_to_write.length - updated} new, ${updated} updated, ${delta.entries_to_cancel.length} cancelled`,
     )
 
     events = applyDelta(state.events, delta, readable, today)
     console.log(`Events: ${events.length} after merge and expiry`)
   }
 
-  // Phase 4: Update Gist
+  // Phase 4: Copy fresh photos out of Telegram before their urls expire
+  const releaseId = await readMediaRelease()
+  events = await rehostPhotos(releaseId, events)
+
+  // Phase 5: Update Gist
   const data: WhatsnextData = {
     updated_at: new Date().toISOString(),
     cursors,
@@ -650,6 +871,9 @@ async function main(): Promise<void> {
   }
   console.log('Updating Gist...')
   await updateGist(data)
+
+  // Phase 6: Sweep, after the write that decided which photos are still live
+  await sweepAssets(releaseId, events)
   console.log('Done!')
 }
 

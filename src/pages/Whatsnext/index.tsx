@@ -1,24 +1,24 @@
 import { lazy, Suspense } from 'react'
 import { Container } from '@/shared'
-import { WatchlogSkeleton } from './Skeleton'
+import { WhatsnextSkeleton } from './Skeleton'
 
-const WatchlogContent = lazy(() => import('./WatchlogContent'))
+const WhatsnextContent = lazy(() => import('./WhatsnextContent'))
 
-export default function Watchlog() {
+export default function Whatsnext() {
   return (
     <div className="py-12 sm:py-16">
       <Container>
         <div className="mb-12">
           <h1 className="font-serif text-3xl sm:text-4xl font-semibold text-foreground">
-            Watchlog
+            Whatsnext
           </h1>
           <p className="mt-3 text-muted-foreground">
-            Movies and TV shows I've been watching, synced from Trakt.
+            Things to do in Saint Petersburg, picked from Telegram channels.
           </p>
         </div>
 
-        <Suspense fallback={<WatchlogSkeleton />}>
-          <WatchlogContent />
+        <Suspense fallback={<WhatsnextSkeleton />}>
+          <WhatsnextContent />
         </Suspense>
       </Container>
     </div>

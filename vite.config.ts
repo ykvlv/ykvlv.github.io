@@ -7,7 +7,11 @@ import { VitePWA } from 'vite-plugin-pwa'
 import { manifest } from './pwa-manifest.ts'
 
 // Exposed to client code via envPrefix and read by the watchlog hook
-const REQUIRED_ENV = ['GIST_ID', 'GIST_FILENAME_WATCHLOG']
+const REQUIRED_ENV = [
+  'GIST_ID',
+  'GIST_FILENAME_WATCHLOG',
+  'GIST_FILENAME_WHATSNEXT',
+]
 
 // Copy index.html to 404.html for SPA routing on GitHub Pages
 function spa404Plugin(): Plugin {
@@ -71,6 +75,19 @@ export default defineConfig(({ mode }) => {
                   maxEntries: 10,
                   maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
                 },
+              },
+            },
+            {
+              urlPattern: /^https:\/\/github\.com\/.*\/releases\/download\/.*/i,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'event-images',
+                expiration: {
+                  maxEntries: 100,
+                  maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+                  purgeOnQuotaError: true,
+                },
+                cacheableResponse: { statuses: [0, 200] },
               },
             },
             {

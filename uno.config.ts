@@ -19,10 +19,6 @@ export default defineConfig({
         DEFAULT: 'hsl(var(--card))',
         foreground: 'hsl(var(--card-foreground))',
       },
-      popover: {
-        DEFAULT: 'hsl(var(--popover))',
-        foreground: 'hsl(var(--popover-foreground))',
-      },
       primary: {
         DEFAULT: 'hsl(var(--primary))',
         foreground: 'hsl(var(--primary-foreground))',
@@ -35,10 +31,6 @@ export default defineConfig({
         DEFAULT: 'hsl(var(--muted))',
         foreground: 'hsl(var(--muted-foreground))',
       },
-      accent: {
-        DEFAULT: 'hsl(var(--accent))',
-        foreground: 'hsl(var(--accent-foreground))',
-      },
       destructive: {
         DEFAULT: 'hsl(var(--destructive))',
         foreground: 'hsl(var(--destructive-foreground))',
@@ -48,7 +40,6 @@ export default defineConfig({
         foreground: 'hsl(var(--success-foreground))',
       },
       border: 'hsl(var(--border))',
-      input: 'hsl(var(--input))',
       ring: 'hsl(var(--ring))',
     },
     borderRadius: {
@@ -64,6 +55,9 @@ export default defineConfig({
   shortcuts: {
     // Layout
     'container-main': 'max-w-[1148px] mx-auto px-4 sm:px-6 lg:px-8',
+
+    // Typography
+    'section-heading': 'font-serif text-2xl font-medium text-foreground',
 
     // Interactive
     focusable:

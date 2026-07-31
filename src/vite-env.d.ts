@@ -4,6 +4,7 @@
 interface ImportMetaEnv {
   readonly GIST_ID: string
   readonly GIST_FILENAME_WATCHLOG: string
+  readonly GIST_FILENAME_WHATSNEXT: string
 }
 
 declare module 'virtual:uno.css' {

@@ -5,15 +5,3 @@ export { WatchlogCard } from './components/WatchlogCard'
 
 // Hooks
 export { useWatchlogData } from './hooks/useWatchlogData'
-
-// Lib
-export { formatWatchedAtAuto, parseWatchedAt } from './lib/watched-date'
-
-// Types
-export type {
-  WatchlogItem,
-  CalendarItem,
-  WatchlogStats,
-  WatchlogData,
-  EpisodeType,
-} from './types'

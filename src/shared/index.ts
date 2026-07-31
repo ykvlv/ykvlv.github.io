@@ -8,11 +8,10 @@ export { Skeleton } from './components/ui/skeleton'
 
 // Shared components
 export { ErrorBoundary } from './components/ErrorBoundary'
-export { ThemeToggle } from './components/ThemeToggle'
 
 // Hooks
-export { useTheme } from './hooks/useTheme'
+export { useGistData } from './hooks/useGistData'
 
 // Lib
 export { cn } from './lib/utils'
-export { civilDate } from './lib/zoned-date'
+export { civilDate, zonedDate, shiftDate } from './lib/zoned-date'

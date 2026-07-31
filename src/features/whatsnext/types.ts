@@ -8,8 +8,10 @@ export interface WhatsnextEvent {
   description: string
   /** `<channel>/<postId>` per announcing post */
   source_posts: string[]
-  /** Hotlinked from Telegram's CDN; set by the script, never the LLM */
+  /** Release asset copied out of Telegram; set by the script, never the LLM */
   photo?: string
+  /** Width / height, measured from the photo's own bytes */
+  photo_ratio?: number
 }
 
 export interface WhatsnextData {

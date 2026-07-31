@@ -1,7 +1,8 @@
 import { Container } from './Container'
+import { zonedDate } from '../../lib/zoned-date'
 
 export function Footer() {
-  const currentYear = new Date().getFullYear()
+  const currentYear = zonedDate(new Date()).slice(0, 4)
 
   return (
     <footer className="border-t border-border py-8 mt-auto">

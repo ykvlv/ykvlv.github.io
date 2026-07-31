@@ -3,6 +3,7 @@ import { AppLayout } from '@/layouts/AppLayout'
 import { ErrorBoundary } from '@/shared'
 import Home from '@/pages/Home'
 import Watchlog from '@/pages/Watchlog'
+import Whatsnext from '@/pages/Whatsnext'
 
 function App() {
   return (
@@ -12,6 +13,7 @@ function App() {
           <Route element={<AppLayout />}>
             <Route path="/" element={<Home />} />
             <Route path="/watchlog" element={<Watchlog />} />
+            <Route path="/whatsnext" element={<Whatsnext />} />
           </Route>
         </Routes>
       </BrowserRouter>
