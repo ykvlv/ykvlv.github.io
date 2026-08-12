@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { cn } from '@/shared'
 import type { WhatsnextEvent } from '../types'
+import { hashId } from '../lib/hash'
 import { packTiles } from '../lib/pack'
 import { EventCard } from './EventCard'
 import { MosaicSkeleton } from './MosaicSkeleton'
@@ -50,11 +51,12 @@ export function Mosaic({ events, today }: MosaicProps) {
 
   const cols = width > 0 ? colsFor(width) : 0
   const colWidth = cols > 0 ? (width - GAP * (cols - 1)) / cols : 0
-  // The only rule left: a text-length threshold earned a wide tile too until
-  // it turned out to fire for one card in nine. No ratio means an entry from
-  // before the script measured them, and a guess is not a measurement
+  // A portrait stacked on top would tower over the column, so it always
+  // wishes wide; everyone else draws the day-salted hash, about one in three
   const isWide = (e: WhatsnextEvent) =>
-    cols > 1 && e.photo_ratio !== undefined && e.photo_ratio < 1
+    cols > 1 &&
+    ((e.photo_ratio !== undefined && e.photo_ratio < 1) ||
+      hashId(`${e.id}@${today}`) % 3 === 0)
 
   const measured = cols > 0 && events.every((e) => heights[e.id] !== undefined)
   const packing = measured
@@ -63,6 +65,8 @@ export function Mosaic({ events, today }: MosaicProps) {
           id: e.id,
           span: isWide(e) ? 2 : 1,
           height: heights[e.id],
+          // The section's own sort key: date for the stream, end for lasting
+          day: e.date_end ?? e.date,
         })),
         cols,
         GAP,
@@ -88,6 +92,8 @@ export function Mosaic({ events, today }: MosaicProps) {
           // Granted span before the wish, which is what the first pass renders
           // and measures: the packer may demote a wide, and width follows it
           const span = pos?.span ?? (isWide(event) ? 2 : 1)
+          // Dim the past
+          const isOver = (event.date_end ?? event.date) < today
           return (
             // The card surface lives on the positioned wrapper: its height is
             // the granted (possibly stretched) one, so seams get painted over,
@@ -97,6 +103,7 @@ export function Mosaic({ events, today }: MosaicProps) {
               aria-hidden={!show}
               className={cn(
                 'absolute top-0 left-0 card-surface overflow-hidden',
+                isOver && 'grayscale',
                 !show && 'pointer-events-none',
               )}
               style={{
@@ -105,7 +112,7 @@ export function Mosaic({ events, today }: MosaicProps) {
                 transform: pos
                   ? `translate(${pos.col * (colWidth + GAP)}px, ${pos.y}px)`
                   : undefined,
-                opacity: show ? 1 : 0,
+                opacity: show ? (isOver ? 0.6 : 1) : 0,
                 // Opacity only: a transform tween would chase the moving
                 // target of a live resize
                 transitionProperty: 'opacity',
