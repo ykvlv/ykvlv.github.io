@@ -7,7 +7,11 @@ export function WhatsnextSkeleton() {
       {/* Last updated */}
       <Skeleton className="h-4 w-40 -mt-10 mb-12" />
 
-      <MosaicSkeleton />
+      {/* "Coming up" skeleton */}
+      <section className="mb-16">
+        <h2 className="section-heading mb-6">Coming up</h2>
+        <MosaicSkeleton />
+      </section>
     </>
   )
 }

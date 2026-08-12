@@ -24,7 +24,7 @@ export function WatchlogCard({ item }: WatchlogCardProps) {
 
   return (
     <a
-      href={item.trakt_url}
+      href={item.source_url}
       target="_blank"
       rel="noopener noreferrer"
       className="group block overflow-hidden card-interactive"

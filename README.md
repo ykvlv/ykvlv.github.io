@@ -11,7 +11,7 @@ React 19, TypeScript, Vite, UnoCSS, PWA (Workbox), Bun
 ### Watchlog
 
 ```
-Trakt API  ->  sync-trakt.ts (daily cron)  ->  GitHub Gist  ->  Frontend
+Trakt API  ->  sync-watchlog.ts (daily cron)  ->  GitHub Gist  ->  Frontend
 ```
 
 Movie and TV watch history synced from Trakt. No backend: a daily cron script fetches history, ratings, and upcoming calendar from Trakt API, saves everything to a public GitHub Gist, and the frontend reads from the raw Gist URL.
@@ -39,7 +39,7 @@ Gist.
 
 ### PWA
 
-Installable, auto-updating, offline-capable. Service worker caches Gist data, Trakt poster images, event photos, and fonts.
+Installable, auto-updating, offline-capable. Service worker caches Gist data, images, and fonts.
 
 ## Getting Started
 
@@ -67,14 +67,14 @@ src/
 └── layouts/            # App shell (Header + Footer)
 
 scripts/
-├── sync-trakt.ts       # Trakt to Gist sync script
+├── sync-watchlog.ts    # Trakt to Gist sync script
 ├── sync-whatsnext.ts   # Telegram to LLM to Gist sync script
 └── whatsnext-prompt.md # Every word the LLM reads
 ```
 
 ## Scripts
 
-### sync-trakt.ts
+### sync-watchlog.ts
 
 Syncs Trakt data to GitHub Gist:
 
@@ -103,7 +103,7 @@ Three GitHub Actions workflows handle deployment:
 | Workflow             | Trigger        | Action                         |
 | -------------------- | -------------- | ------------------------------ |
 | `deploy.yml`         | Push to `main` | Build & deploy to GitHub Pages |
-| `sync-trakt.yml`     | Cron (daily)   | Sync watch history to Gist     |
+| `sync-watchlog.yml`  | Cron (daily)   | Sync watch history to Gist     |
 | `sync-whatsnext.yml` | Cron (daily)   | Sync Telegram events to Gist   |
 
 ## Environment Variables

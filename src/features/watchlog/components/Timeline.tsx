@@ -270,7 +270,7 @@ const TimelineCard = memo(function TimelineCard({
 
   return (
     <a
-      href={item.trakt_url}
+      href={item.source_url}
       target="_blank"
       rel="noopener noreferrer"
       className="group block w-36 overflow-hidden card-interactive"

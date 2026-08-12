@@ -3,7 +3,8 @@
  *
  * Fetches movie/show history, ratings, and calendar from Trakt API,
  * groups consecutive episodes by show+season,
- * and saves to a public Gist for frontend consumption.
+ * rehosts posters onto github.com, and saves the payload to a
+ * public Gist for frontend consumption.
  *
  * Features:
  * - Automatic OAuth token refresh with validation
@@ -12,6 +13,9 @@
  */
 
 import libsodium from 'libsodium-wrappers'
+import { openGist } from './lib/gist.ts'
+import { GITHUB_API_BASE, githubHeaders } from './lib/github.ts'
+import { mediaStore } from './lib/media-store.ts'
 import { formatWatchedAtAuto } from '@/features/watchlog/lib/watched-date'
 import { zonedDate, shiftDate } from '@/shared/lib/zoned-date'
 import type {
@@ -27,12 +31,14 @@ import type {
 // ============================================================================
 
 const TRAKT_API_BASE = 'https://api.trakt.tv'
-const GITHUB_API_BASE = 'https://api.github.com'
+const MEDIA_RELEASE_TAG = 'watchlog-media'
 
 // Raw history items to fetch
 const HISTORY_LIMIT = 100
 // Calendar lookahead period
 const CALENDAR_DAYS = 365
+// The maximum amount of days you can send is 33
+const CALENDAR_WINDOW_DAYS = 33
 // Max items displayed on the frontend
 const OUTPUT_ITEMS_LIMIT = 30
 
@@ -57,6 +63,9 @@ const GIST_ID = requireEnv('GIST_ID')
 const GIST_FILENAME_WATCHLOG = requireEnv('GIST_FILENAME_WATCHLOG')
 const GH_TOKEN = requireEnv('GH_TOKEN')
 const GH_REPOSITORY = requireEnv('GH_REPOSITORY')
+
+const gist = openGist(GIST_ID, GH_TOKEN)
+const media = mediaStore(GH_REPOSITORY, MEDIA_RELEASE_TAG, GH_TOKEN)
 
 // ============================================================================
 // Trakt API Types
@@ -340,16 +349,30 @@ class TraktClient {
     // A window from today may lose some episodes
     const start = shiftDate(zonedDate(new Date()), -1)
 
+    // Both ends are inclusive, hence the step of one day more.
+    const starts: string[] = []
+    for (let day = 0; day <= CALENDAR_DAYS; day += CALENDAR_WINDOW_DAYS + 1) {
+      starts.push(shiftDate(start, day))
+    }
+
     const [episodes, movies] = await Promise.all([
-      this.get<TraktCalendarEpisode[]>(
-        `/calendars/my/shows/${start}/${CALENDAR_DAYS + 1}?extended=full,images`,
+      Promise.all(
+        starts.map((from) =>
+          this.get<TraktCalendarEpisode[]>(
+            `/calendars/my/shows/${from}/${CALENDAR_WINDOW_DAYS}?extended=full,images`,
+          ),
+        ),
       ),
-      this.get<TraktCalendarMovie[]>(
-        `/calendars/my/movies/${start}/${CALENDAR_DAYS + 1}?extended=images`,
+      Promise.all(
+        starts.map((from) =>
+          this.get<TraktCalendarMovie[]>(
+            `/calendars/my/movies/${from}/${CALENDAR_WINDOW_DAYS}?extended=images`,
+          ),
+        ),
       ),
     ])
 
-    return { episodes, movies }
+    return { episodes: episodes.flat(), movies: movies.flat() }
   }
 }
 
@@ -466,7 +489,7 @@ function enrichItems(
         year: item.movie.year,
         ...(poster && { poster }),
         watched_at: formatWatchedAtAuto(item.watched_at, referenceDate),
-        trakt_url: `https://trakt.tv/movies/${item.movie.ids.slug}`,
+        source_url: `https://trakt.tv/movies/${item.movie.ids.slug}`,
         ...(rating && { rating }),
       }
     }
@@ -502,7 +525,11 @@ function enrichItems(
         year,
         ...(poster && { poster }),
         watched_at: formatWatchedAtAuto(group.watched_at, referenceDate),
-        trakt_url: buildShowUrl(group.show.ids.slug, group.season, episodes[0]),
+        source_url: buildShowUrl(
+          group.show.ids.slug,
+          group.season,
+          episodes[0],
+        ),
         ...(rating && { rating }),
       }
     }
@@ -514,7 +541,7 @@ function enrichItems(
       year,
       ...(poster && { poster }),
       watched_at: formatWatchedAtAuto(group.watched_at, referenceDate),
-      trakt_url: buildShowUrl(group.show.ids.slug, group.season),
+      source_url: buildShowUrl(group.show.ids.slug, group.season),
       ...(seasonRating && { rating: seasonRating }),
     }
   })
@@ -607,7 +634,7 @@ function enrichCalendar(
 
       const isSingleEpisode = group.episodes.length === 1
       const type = isSingleEpisode ? 'episode' : 'season'
-      const trakt_url = buildShowUrl(
+      const source_url = buildShowUrl(
         group.show.ids.slug,
         group.season,
         isSingleEpisode ? group.episodes[0] : undefined,
@@ -619,7 +646,7 @@ function enrichCalendar(
         subtitle: formatEpisodeSubtitle(group.season, group.episodes),
         date: group.date,
         ...(poster && { poster }),
-        trakt_url,
+        source_url,
         episode_type: group.episode_type,
       }
     }),
@@ -630,7 +657,7 @@ function enrichCalendar(
         title: m.movie.title,
         date: m.released,
         ...(poster && { poster }),
-        trakt_url: `https://trakt.tv/movies/${m.movie.ids.slug}`,
+        source_url: `https://trakt.tv/movies/${m.movie.ids.slug}`,
       }
     }),
   ]
@@ -642,35 +669,31 @@ function enrichCalendar(
 }
 
 // ============================================================================
-// Gist API
+// Release assets
 // ============================================================================
 
-async function updateGist(data: WatchlogData): Promise<void> {
-  const response = await fetch(`${GITHUB_API_BASE}/gists/${GIST_ID}`, {
-    method: 'PATCH',
-    headers: {
-      Accept: 'application/vnd.github+json',
-      Authorization: `Bearer ${GH_TOKEN}`,
-      'X-GitHub-Api-Version': '2022-11-28',
-    },
-    body: JSON.stringify({
-      files: {
-        [GIST_FILENAME_WATCHLOG]: {
-          content: JSON.stringify(data, null, 2),
-        },
-      },
-    }),
-  })
+// Named after the image, not the card: one season poster serves many cards.
+// The last path segment is the catalog's digest, so a replaced poster copies afresh.
+function assetName(posterUrl: string): string {
+  const path = posterUrl
+    .replace(/^https?:\/\/[^/]+\//, '')
+    .replace(/^images\//, '')
+  return path.replaceAll('/', '-')
+}
 
-  if (!response.ok) {
-    const body = await response.text()
-    throw new Error(`GitHub API error: ${response.status} - ${body}`)
+/** Copies every Trakt poster into the release and points the card at it. */
+async function rehostPosters(cards: { poster?: string }[]): Promise<void> {
+  for (const card of cards) {
+    if (!card.poster) continue
+    card.poster = (await media.keep(assetName(card.poster), card.poster))?.url
   }
 }
 
 // ============================================================================
 // GitHub Secrets API
 // ============================================================================
+
+const GH_HEADERS = githubHeaders(GH_TOKEN)
 
 interface GitHubPublicKey {
   key_id: string
@@ -680,13 +703,7 @@ interface GitHubPublicKey {
 async function getRepoPublicKey(): Promise<GitHubPublicKey> {
   const response = await fetch(
     `${GITHUB_API_BASE}/repos/${GH_REPOSITORY}/actions/secrets/public-key`,
-    {
-      headers: {
-        Accept: 'application/vnd.github+json',
-        Authorization: `Bearer ${GH_TOKEN}`,
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    },
+    { headers: GH_HEADERS },
   )
 
   if (!response.ok) {
@@ -719,11 +736,7 @@ async function updateGitHubSecret(
     `${GITHUB_API_BASE}/repos/${GH_REPOSITORY}/actions/secrets/${name}`,
     {
       method: 'PUT',
-      headers: {
-        Accept: 'application/vnd.github+json',
-        Authorization: `Bearer ${GH_TOKEN}`,
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
+      headers: GH_HEADERS,
       body: JSON.stringify({
         encrypted_value: encryptedValue,
         key_id: publicKey.key_id,
@@ -765,11 +778,11 @@ async function main() {
     TRAKT_REFRESH_TOKEN,
   )
 
-  // Phase 0: Ensure a token is valid before proceeding
+  // Ensure a token is valid before proceeding
   console.log('Validating token...')
   await client.ensureValidToken()
 
-  // Phase 1: Fetch history, stats, calendar in parallel
+  // Fetch history, stats and calendar in parallel
   console.log('Fetching history, stats, and calendar...')
   const [history, stats, rawCalendar] = await Promise.all([
     client.getHistory(),
@@ -783,7 +796,7 @@ async function main() {
     `Stats: ${stats.movies_watched} movies, ${stats.shows_watched} shows, ${stats.total_hours}h`,
   )
 
-  // Phase 2: Group episodes by season + collect all slugs
+  // Group episodes by season + collect all slugs
   console.log('Grouping episodes...')
   const referenceDate = new Date()
   const grouped = groupHistory(history, referenceDate)
@@ -792,14 +805,14 @@ async function main() {
     `Grouped into ${grouped.length} items, ${slugs.length} unique shows`,
   )
 
-  // Phase 3: Fetch seasons and ratings in parallel
+  // Fetch seasons and ratings in parallel
   console.log('Fetching seasons and ratings...')
   const [seasonsMap, ratings] = await Promise.all([
     client.getShowSeasonsParallel(slugs),
     client.getRatings(),
   ])
 
-  // Phase 4: Enrich history and calendar
+  // Enrich history and calendar
   const items = enrichItems(grouped, seasonsMap, ratings, referenceDate).slice(
     0,
     OUTPUT_ITEMS_LIMIT,
@@ -811,7 +824,11 @@ async function main() {
   )
   console.log(`Output: ${items.length} items, ${calendar.length} calendar`)
 
-  // Phase 5: Update Gist
+  // Copy posters into the release and point the cards at it
+  console.log('Rehosting posters...')
+  await rehostPosters([...items, ...calendar])
+
+  // Assemble the payload
   const data: WatchlogData = {
     updated_at: new Date().toISOString(),
     items,
@@ -819,8 +836,12 @@ async function main() {
     calendar,
   }
 
+  // Update Gist
   console.log('Updating Gist...')
-  await updateGist(data)
+  await gist.write(GIST_FILENAME_WATCHLOG, data)
+
+  // Sweep, after the write that decided which posters are still live.
+  await media.sweep()
   console.log('Done!')
 }
 

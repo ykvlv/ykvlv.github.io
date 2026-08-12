@@ -81,20 +81,7 @@ export default defineConfig(({ mode }) => {
               urlPattern: /^https:\/\/github\.com\/.*\/releases\/download\/.*/i,
               handler: 'CacheFirst',
               options: {
-                cacheName: 'event-images',
-                expiration: {
-                  maxEntries: 100,
-                  maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
-                  purgeOnQuotaError: true,
-                },
-                cacheableResponse: { statuses: [0, 200] },
-              },
-            },
-            {
-              urlPattern: /^https:\/\/.*\.trakt\.tv\/images\/.*/i,
-              handler: 'CacheFirst',
-              options: {
-                cacheName: 'trakt-images',
+                cacheName: 'release-images',
                 expiration: {
                   maxEntries: 200,
                   maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days

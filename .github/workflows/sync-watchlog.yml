@@ -1,4 +1,4 @@
-name: Sync Trakt Watch History
+name: Sync Watchlog History
 
 on:
   schedule:
@@ -20,9 +20,9 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: 🎬 Sync Trakt history to Gist
-        run: bun run scripts/sync-trakt.ts
+        run: bun run scripts/sync-watchlog.ts
         env:
-          TRAKT_CLIENT_ID: ${{ vars.TRAKT_CLIENT_ID }}
+          TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
           TRAKT_CLIENT_SECRET: ${{ secrets.TRAKT_CLIENT_SECRET }}
           TRAKT_ACCESS_TOKEN: ${{ secrets.TRAKT_ACCESS_TOKEN }}
           TRAKT_REFRESH_TOKEN: ${{ secrets.TRAKT_REFRESH_TOKEN }}

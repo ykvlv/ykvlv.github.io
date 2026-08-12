@@ -14,6 +14,8 @@
  */
 
 import { readFile } from 'node:fs/promises'
+import { openGist } from './lib/gist.ts'
+import { mediaStore } from './lib/media-store.ts'
 import type { WhatsnextData, WhatsnextEvent } from '@/features/whatsnext/types'
 import { zonedDate, withWeekday } from '@/shared/lib/zoned-date'
 
@@ -22,11 +24,7 @@ import { zonedDate, withWeekday } from '@/shared/lib/zoned-date'
 // ============================================================================
 
 const TELEGRAM_PREVIEW_BASE = 'https://t.me/s'
-const GITHUB_API_BASE = 'https://api.github.com'
-const GITHUB_UPLOADS_BASE = 'https://uploads.github.com'
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
-
-// One release holds every photo; the sweep keeps it under the 1000-asset cap.
 const MEDIA_RELEASE_TAG = 'whatsnext-media'
 
 const MODEL = 'google/gemini-3-flash-preview'
@@ -62,11 +60,8 @@ const GIST_FILENAME_WHATSNEXT = requireEnv('GIST_FILENAME_WHATSNEXT')
 const GH_TOKEN = requireEnv('GH_TOKEN')
 const GH_REPOSITORY = requireEnv('GH_REPOSITORY')
 
-const GH_HEADERS = {
-  Accept: 'application/vnd.github+json',
-  Authorization: `Bearer ${GH_TOKEN}`,
-  'X-GitHub-Api-Version': '2022-11-28',
-}
+const gist = openGist(GIST_ID, GH_TOKEN)
+const media = mediaStore(GH_REPOSITORY, MEDIA_RELEASE_TAG, GH_TOKEN)
 
 // ============================================================================
 // Telegram Preview
@@ -566,245 +561,41 @@ function applyDelta(
 }
 
 // ============================================================================
-// Release Media
+// Release assets
 // ============================================================================
-
-// A Telegram CDN url embeds an expiring file_reference: most die within a day,
-// a dead one never revives, and re-rendering the post mints a different url
-// instead. So a photo is copied out on the run that first sees it - by the next
-// one its post is behind the cursor and the url is already gone. Release assets
-// rather than the repo, whose git history would carry every photo forever.
-
-const ASSET_BASE = `https://github.com/${GH_REPOSITORY}/releases/download/${MEDIA_RELEASE_TAG}/`
-
-interface ReleaseAsset {
-  id: number
-  name: string
-  created_at: string
-}
-
-// GitHub caps a release at 1000 assets. The rest is headroom: a run uploads
-// before it sweeps, so it must never meet the cap mid-copy.
-const ASSET_LIMIT = 900
 
 // GitHub rewrites some characters in an asset name, so the id separators go first.
 function assetName(eventId: string): string {
   return `${eventId.replaceAll('/', '-').replaceAll('#', '-')}.jpg`
 }
 
-/** Id of the one media release, which this script only ever reads. */
-async function readMediaRelease(): Promise<number> {
-  const found = await fetch(
-    `${GITHUB_API_BASE}/repos/${GH_REPOSITORY}/releases/tags/${MEDIA_RELEASE_TAG}`,
-    { headers: GH_HEADERS },
-  )
-  if (!found.ok) {
-    throw new Error(
-      `${MEDIA_RELEASE_TAG} release: ${found.status} - ${await found.text()}`,
-    )
-  }
-  return ((await found.json()) as { id: number }).id
-}
-
-/**
- * Width / height from a JPEG's own header, which is what Telegram serves.
- * The frontend reserves the tile's photo box from this, so it must come from
- * the bytes: a post's HTML publishes the shape of a single photo, but inside
- * an album it publishes the collage crop instead of the photo.
- */
-function jpegRatio(bytes: Uint8Array): number | undefined {
-  // Refuse anything else outright: the scan below would find marker-shaped
-  // bytes in a PNG too and answer with a shape nobody measured
-  if (bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff) return
-
-  // Every marker is 0xFF plus a code, then a big-endian length. SOFn holds
-  // height then width; the coding-table markers in that range hold neither.
-  for (let i = 2; i + 9 < bytes.length;) {
-    if (bytes[i] !== 0xff) {
-      i++
-      continue
-    }
-    const marker = bytes[i + 1]
-    if (
-      marker >= 0xc0 &&
-      marker <= 0xcf &&
-      marker !== 0xc4 &&
-      marker !== 0xc8 &&
-      marker !== 0xcc
-    ) {
-      const height = (bytes[i + 5] << 8) | bytes[i + 6]
-      const width = (bytes[i + 7] << 8) | bytes[i + 8]
-      return height > 0 ? Number((width / height).toFixed(3)) : undefined
-    }
-    i += 2 + ((bytes[i + 2] << 8) | bytes[i + 3])
-  }
-}
-
-/** Asset url and shape, or nothing once Telegram's copy is gone. */
-async function uploadPhoto(
-  releaseId: number,
-  name: string,
-  source: string,
-): Promise<{ url: string; ratio?: number } | undefined> {
-  const image = await fetch(source)
-  if (!image.ok) {
-    // Expired between the page render and here. The post is unreachable now, so
-    // the entry loses its picture rather than wedging every future run.
-    console.warn(`${name}: source photo ${image.status}, dropped`)
-    return undefined
-  }
-
-  const bytes = new Uint8Array(await image.arrayBuffer())
-  const response = await fetch(
-    `${GITHUB_UPLOADS_BASE}/repos/${GH_REPOSITORY}/releases/${releaseId}/assets?name=${name}`,
-    {
-      method: 'POST',
-      headers: {
-        ...GH_HEADERS,
-        'Content-Type': image.headers.get('content-type') ?? 'image/jpeg',
-      },
-      body: bytes,
-    },
-  )
-  if (!response.ok) {
-    const detail = await response.text()
-    // A run that dies before the gist write leaves the asset but not the
-    // advanced cursor, so the next run mints that id again. Throwing here
-    // would wedge every run after it on the same name.
-    if (response.status === 422 && detail.includes('already_exists')) {
-      console.warn(`${name}: already in the release, kept as is`)
-      return { url: `${ASSET_BASE}${name}`, ratio: jpegRatio(bytes) }
-    }
-    throw new Error(`GitHub API error: ${response.status} - ${detail}`)
-  }
-
-  const { browser_download_url } = (await response.json()) as {
-    browser_download_url: string
-  }
-  return { url: browser_download_url, ratio: jpegRatio(bytes) }
-}
-
-/** The events again, with every Telegram photo now pointing at the release. */
+/** Copies every Telegram photo into the release and points the event at it. */
 async function rehostPhotos(
-  releaseId: number,
   events: WhatsnextEvent[],
 ): Promise<WhatsnextEvent[]> {
   const rehosted: WhatsnextEvent[] = []
-  let copied = 0
+  let count = 0
 
   for (const event of events) {
-    // Copied by an earlier run, so it is never re-read either: a photo older
-    // than photo_ratio keeps none, which is why the frontend tolerates that
-    if (!event.photo || event.photo.startsWith(ASSET_BASE)) {
+    if (!event.photo) {
       rehosted.push(event)
       continue
     }
 
-    const photo = await uploadPhoto(releaseId, assetName(event.id), event.photo)
-    if (photo) copied++
-    rehosted.push({ ...event, photo: photo?.url, photo_ratio: photo?.ratio })
+    const kept = await media.keep(assetName(event.id), event.photo)
+    // A stored photo is already a release url, so a changed url means a copy.
+    if (kept && kept.url !== event.photo) count++
+    rehosted.push({
+      ...event,
+      photo: kept?.url,
+      // Off the stored bytes, never the post's HTML, which publishes the
+      // collage crop for a photo inside an album.
+      photo_ratio: kept && (kept.ratio ?? event.photo_ratio),
+    })
   }
 
-  if (copied > 0) console.log(`Photos: ${copied} copied into the release`)
+  if (count > 0) console.log(`Photos: ${count} copied into the release`)
   return rehosted
-}
-
-/** Every asset of the release, across as many pages as it takes. */
-async function readAssets(releaseId: number): Promise<ReleaseAsset[]> {
-  const assets: ReleaseAsset[] = []
-  for (let page = 1; ; page++) {
-    const response = await fetch(
-      `${GITHUB_API_BASE}/repos/${GH_REPOSITORY}/releases/${releaseId}/assets?per_page=100&page=${page}`,
-      { headers: GH_HEADERS },
-    )
-    if (!response.ok) {
-      throw new Error(
-        `GitHub API error: ${response.status} - ${await response.text()}`,
-      )
-    }
-    const batch = (await response.json()) as ReleaseAsset[]
-    assets.push(...batch)
-    if (batch.length < 100) return assets
-  }
-}
-
-/**
- * Frees room once the release nears the cap and only then, oldest orphans
- * first. Below the limit nothing is deleted: an orphan costs a slot and
- * nothing else, while deleting one takes the last surviving copy of a photo
- * with it, and an event dropped by mistake can be restored where its picture
- * cannot.
- */
-async function sweepAssets(
-  releaseId: number,
-  events: WhatsnextEvent[],
-): Promise<void> {
-  const assets = await readAssets(releaseId)
-  if (assets.length <= ASSET_LIMIT) return
-
-  const live = new Set(
-    events.flatMap((event) => (event.photo ? [assetName(event.id)] : [])),
-  )
-  const doomed = assets
-    .filter((asset) => !live.has(asset.name))
-    .sort((a, b) => a.created_at.localeCompare(b.created_at))
-    // Clamped: a negative end slices from the tail and would take every
-    // orphan but the newest
-    .slice(0, Math.max(0, assets.length - ASSET_LIMIT))
-
-  for (const asset of doomed) {
-    await fetch(
-      `${GITHUB_API_BASE}/repos/${GH_REPOSITORY}/releases/assets/${asset.id}`,
-      { method: 'DELETE', headers: GH_HEADERS },
-    )
-  }
-
-  console.log(
-    `Photos: ${assets.length} assets in the release, ${doomed.length} oldest orphans swept`,
-  )
-}
-
-// ============================================================================
-// Gist API
-// ============================================================================
-
-async function readGist(): Promise<WhatsnextData> {
-  const response = await fetch(`${GITHUB_API_BASE}/gists/${GIST_ID}`, {
-    headers: GH_HEADERS,
-  })
-
-  if (!response.ok) {
-    throw new Error(
-      `GitHub API error: ${response.status} - ${await response.text()}`,
-    )
-  }
-
-  const gist = (await response.json()) as {
-    files: Record<string, { content: string } | undefined>
-  }
-  const file = gist.files[GIST_FILENAME_WHATSNEXT]
-
-  return file
-    ? (JSON.parse(file.content) as WhatsnextData)
-    : { updated_at: '', cursors: {}, events: [] }
-}
-
-async function updateGist(data: WhatsnextData): Promise<void> {
-  const response = await fetch(`${GITHUB_API_BASE}/gists/${GIST_ID}`, {
-    method: 'PATCH',
-    headers: GH_HEADERS,
-    body: JSON.stringify({
-      files: {
-        [GIST_FILENAME_WHATSNEXT]: { content: JSON.stringify(data, null, 2) },
-      },
-    }),
-  })
-
-  if (!response.ok) {
-    throw new Error(
-      `GitHub API error: ${response.status} - ${await response.text()}`,
-    )
-  }
 }
 
 // ============================================================================
@@ -812,14 +603,18 @@ async function updateGist(data: WhatsnextData): Promise<void> {
 // ============================================================================
 
 async function main(): Promise<void> {
-  // Phase 0: Read the stored listing
+  // Read the stored listing
   console.log('Reading Gist...')
-  const state = await readGist()
+  const state = (await gist.read<WhatsnextData>(GIST_FILENAME_WHATSNEXT)) ?? {
+    updated_at: '',
+    cursors: {},
+    events: [],
+  }
   console.log(
     `Stored: ${state.events.length} events, cursors for ${Object.keys(state.cursors).length} channels`,
   )
 
-  // Phase 1: Collect fresh posts
+  // Collect fresh posts
   console.log('Fetching channel previews...')
   const { posts, cursors } = await collectPosts(state.cursors)
   if (posts.length === 0) {
@@ -838,11 +633,11 @@ async function main(): Promise<void> {
   if (readable.length === 0) {
     console.log('No readable posts, advancing cursors only')
   } else {
-    // Phase 2: Ask the model for a delta
+    // Ask the model for a delta
     console.log(`Asking ${MODEL} about ${readable.length} posts...`)
     const delta = await extractDelta(today, state.events, readable)
 
-    // Phase 3: Merge
+    // Merge
     const known = new Set(state.events.map((event) => event.id))
     for (const entry of delta.entries_to_write) {
       const target = entry.id !== null && known.has(entry.id) ? entry.id : 'new'
@@ -859,21 +654,20 @@ async function main(): Promise<void> {
     console.log(`Events: ${events.length} after merge and expiry`)
   }
 
-  // Phase 4: Copy fresh photos out of Telegram before their urls expire
-  const releaseId = await readMediaRelease()
-  events = await rehostPhotos(releaseId, events)
+  // Copy fresh photos out of Telegram before their urls expire
+  events = await rehostPhotos(events)
 
-  // Phase 5: Update Gist
+  // Update Gist
   const data: WhatsnextData = {
     updated_at: new Date().toISOString(),
     cursors,
     events,
   }
   console.log('Updating Gist...')
-  await updateGist(data)
+  await gist.write(GIST_FILENAME_WHATSNEXT, data)
 
-  // Phase 6: Sweep, after the write that decided which photos are still live
-  await sweepAssets(releaseId, events)
+  // Sweep, after the write that decided which photos are still live
+  await media.sweep()
   console.log('Done!')
 }
 

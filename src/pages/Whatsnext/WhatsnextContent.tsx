@@ -44,6 +44,7 @@ export default function WhatsnextContent() {
       {/* Chronological mosaic */}
       {stream.length > 0 && (
         <section className="mb-16">
+          <h2 className="section-heading mb-6">Coming up</h2>
           <Mosaic events={stream} today={today} />
         </section>
       )}

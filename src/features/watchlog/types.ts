@@ -5,7 +5,7 @@ export interface WatchlogItem {
   year: number
   poster?: string
   watched_at: string
-  trakt_url: string
+  source_url: string
   rating?: number
 }
 
@@ -30,7 +30,7 @@ export interface CalendarItem {
   subtitle?: string
   date: string
   poster?: string
-  trakt_url: string
+  source_url: string
   episode_type?: EpisodeType
 }
 
