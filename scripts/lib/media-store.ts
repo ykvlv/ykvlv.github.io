@@ -44,32 +44,14 @@ interface MediaStore {
   sweep(): Promise<void>
 }
 
-/** Width / height from a JPEG's own header; `undefined` for anything else. */
-function jpegRatio(bytes: Uint8Array): number | undefined {
-  // Refuse anything else outright: the scan below would find marker-shaped
-  // bytes in a PNG too and answer with a shape nobody measured
-  if (bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff) return
-
-  // Every marker is 0xFF plus a code, then a big-endian length. SOFn holds
-  // height then width; the coding-table markers in that range hold neither.
-  for (let i = 2; i + 9 < bytes.length;) {
-    if (bytes[i] !== 0xff) {
-      i++
-      continue
-    }
-    const marker = bytes[i + 1]
-    if (
-      marker >= 0xc0 &&
-      marker <= 0xcf &&
-      marker !== 0xc4 &&
-      marker !== 0xc8 &&
-      marker !== 0xcc
-    ) {
-      const height = (bytes[i + 5] << 8) | bytes[i + 6]
-      const width = (bytes[i + 7] << 8) | bytes[i + 8]
-      return height > 0 ? Number((width / height).toFixed(3)) : undefined
-    }
-    i += 2 + ((bytes[i + 2] << 8) | bytes[i + 3])
+/** Width / height off the bytes; `undefined` for anything else. */
+async function measure(bytes: Uint8Array): Promise<number | undefined> {
+  try {
+    const { width, height } = await new Bun.Image(bytes).metadata()
+    return height > 0 ? Number((width / height).toFixed(3)) : undefined
+  } catch {
+    // Not a recognizable format
+    return undefined
   }
 }
 
@@ -170,7 +152,7 @@ export function mediaStore(
       bytes,
       response.headers.get('content-type') ?? 'image/jpeg',
     )
-    return { url, ratio: jpegRatio(bytes) }
+    return { url, ratio: await measure(bytes) }
   }
 
   return {

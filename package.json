@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "bun@1.4.x",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -24,6 +25,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@iconify-json/lucide": "^1.2.119",
+    "@types/bun": "^1.4.0",
     "@types/libsodium-wrappers": "^0.8.2",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.17",
