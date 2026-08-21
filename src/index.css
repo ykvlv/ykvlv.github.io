@@ -8,22 +8,18 @@
   --foreground: 220 15% 20%;
 
   --card: 45 25% 98%;
-  --card-foreground: 220 15% 20%;
 
   --primary: 239 84% 67%;
   --primary-foreground: 0 0% 100%;
 
   --secondary: 45 20% 92%;
-  --secondary-foreground: 220 15% 30%;
 
   --muted: 45 15% 90%;
   --muted-foreground: 220 10% 46%;
 
   --destructive: 0 70% 50%;
-  --destructive-foreground: 0 0% 100%;
 
   --success: 150 70% 40%;
-  --success-foreground: 0 0% 100%;
 
   --border: 45 15% 88%;
   --ring: 239 84% 67%;
@@ -36,22 +32,18 @@
   --foreground: 45 20% 90%;
 
   --card: 222 40% 10%;
-  --card-foreground: 45 20% 90%;
 
   --primary: 239 84% 75%;
   --primary-foreground: 222 47% 7%;
 
   --secondary: 222 30% 15%;
-  --secondary-foreground: 45 15% 80%;
 
   --muted: 222 25% 18%;
   --muted-foreground: 45 10% 60%;
 
   --destructive: 0 55% 45%;
-  --destructive-foreground: 0 0% 100%;
 
   --success: 150 55% 35%;
-  --success-foreground: 0 0% 100%;
 
   --border: 222 20% 20%;
   --ring: 239 84% 75%;

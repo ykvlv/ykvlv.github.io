@@ -247,14 +247,17 @@ const TimelineSegment = memo(function TimelineSegment({
   )
 })
 
-const EPISODE_TYPE_LABELS: Record<EpisodeType, string> = {
-  series_premiere: 'New Series',
-  season_premiere: 'Season Premiere',
-  mid_season_premiere: 'Mid-Premiere',
-  mid_season_finale: 'Mid-Finale',
-  season_finale: 'Season Finale',
-  series_finale: 'The End',
-  standard: 'Episode',
+const EPISODE_TYPE_BADGES: Record<
+  EpisodeType,
+  { label: string; tint: string }
+> = {
+  series_premiere: { label: 'New Series', tint: 'bg-success/60' },
+  season_premiere: { label: 'Season Premiere', tint: 'bg-success/60' },
+  mid_season_premiere: { label: 'Mid-Premiere', tint: 'bg-success/60' },
+  mid_season_finale: { label: 'Mid-Finale', tint: 'bg-destructive/60' },
+  season_finale: { label: 'Season Finale', tint: 'bg-destructive/60' },
+  series_finale: { label: 'The End', tint: 'bg-destructive/60' },
+  standard: { label: 'Episode', tint: 'bg-black/60' },
 }
 
 const TimelineCard = memo(function TimelineCard({
@@ -263,10 +266,10 @@ const TimelineCard = memo(function TimelineCard({
   item: CalendarItem
 }) {
   const [imgError, setImgError] = useState(false)
-  const badgeLabel =
-    item.episode_type &&
-    item.episode_type !== 'standard' &&
-    EPISODE_TYPE_LABELS[item.episode_type]
+  const badge =
+    item.episode_type && item.episode_type !== 'standard'
+      ? EPISODE_TYPE_BADGES[item.episode_type]
+      : undefined
 
   return (
     <a
@@ -290,19 +293,8 @@ const TimelineCard = memo(function TimelineCard({
             <span className="i-lucide-image-off size-8 text-muted-foreground" />
           </div>
         )}
-        {badgeLabel && (
-          <div
-            className={cn(
-              'absolute top-2 right-2 px-2.5 py-1 rounded-full backdrop-blur-sm text-white text-xs font-medium',
-              item.episode_type?.includes('finale')
-                ? 'bg-destructive/60'
-                : item.episode_type?.includes('premiere')
-                  ? 'bg-success/60'
-                  : 'bg-black/60',
-            )}
-          >
-            {badgeLabel}
-          </div>
+        {badge && (
+          <div className={cn('badge-overlay', badge.tint)}>{badge.label}</div>
         )}
       </div>
 

@@ -2,10 +2,10 @@
  * Watched date formatting with variable granularity.
  *
  * Format determines precision:
- * - "2025-01-10"  (YYYY-MM-DD) → day   (< 7 days ago)
- * - "2025-W02"    (YYYY-Wnn)   → week  (7-29 days ago)
- * - "2025-01"     (YYYY-MM)    → month (30-364 days ago)
- * - "2025"        (YYYY)       → year  (365+ days ago)
+ * - "2025-01-10"  (YYYY-MM-DD) -> day   (< 7 days ago)
+ * - "2025-W02"    (YYYY-Wnn)   -> week  (7-29 days ago)
+ * - "2025-01"     (YYYY-MM)    -> month (30-364 days ago)
+ * - "2025"        (YYYY)       -> year  (365+ days ago)
  *
  * Both sides speak zoned dates (see @/shared/lib/zoned-date), so the day the
  * script writes and the day the frontend calls "Today" are the same day for
@@ -61,7 +61,7 @@ export function formatWatchedAtAuto(
 }
 
 // ============================================================================
-// Parsing (Frontend-side)
+// Formatting (Frontend-side)
 // ============================================================================
 
 const PATTERNS = {
@@ -99,7 +99,7 @@ function getRepresentativeDate(
   }
 }
 
-export function parseWatchedAt(watchedAt: string): string {
+export function formatWatchedAtRelative(watchedAt: string): string {
   const granularity = detectGranularity(watchedAt)
   const date = getRepresentativeDate(watchedAt, granularity)
   const today = civilDate(zonedDate(new Date()))

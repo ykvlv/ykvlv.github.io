@@ -5,7 +5,7 @@ export function WhatsnextSkeleton() {
   return (
     <>
       {/* Last updated */}
-      <Skeleton className="h-4 w-40 -mt-10 mb-12" />
+      <Skeleton className="h-4 w-40 mb-12" />
 
       {/* "Coming up" skeleton */}
       <section className="mb-16">

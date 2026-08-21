@@ -4,7 +4,7 @@ export function WatchlogSkeleton() {
   return (
     <>
       {/* Last updated */}
-      <Skeleton className="h-4 w-40 -mt-10 mb-12" />
+      <Skeleton className="h-4 w-40 mb-12" />
 
       {/* Recently Watched */}
       <section className="mb-16">

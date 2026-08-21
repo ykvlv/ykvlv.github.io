@@ -13,6 +13,7 @@
  */
 
 import libsodium from 'libsodium-wrappers'
+import { requireEnv } from './lib/env.ts'
 import { openGist } from './lib/gist.ts'
 import { GITHUB_API_BASE, githubHeaders } from './lib/github.ts'
 import { mediaStore } from './lib/media-store.ts'
@@ -45,15 +46,6 @@ const OUTPUT_ITEMS_LIMIT = 30
 // ============================================================================
 // Environment
 // ============================================================================
-
-function requireEnv(name: string): string {
-  const value = process.env[name]
-  if (!value) {
-    console.error(`Missing required environment variable: ${name}`)
-    process.exit(1)
-  }
-  return value
-}
 
 const TRAKT_CLIENT_ID = requireEnv('TRAKT_CLIENT_ID')
 const TRAKT_CLIENT_SECRET = requireEnv('TRAKT_CLIENT_SECRET')
@@ -349,9 +341,9 @@ class TraktClient {
     // A window from today may lose some episodes
     const start = shiftDate(zonedDate(new Date()), -1)
 
-    // Both ends are inclusive, hence the step of one day more.
+    // `days` covers [from, from + days - 1], so windows butt up without a gap.
     const starts: string[] = []
-    for (let day = 0; day <= CALENDAR_DAYS; day += CALENDAR_WINDOW_DAYS + 1) {
+    for (let day = 0; day <= CALENDAR_DAYS; day += CALENDAR_WINDOW_DAYS) {
       starts.push(shiftDate(start, day))
     }
 
@@ -579,10 +571,10 @@ function groupCalendarEpisodes(
     const existing = groups.get(key)
     if (existing) {
       existing.episodes.push(ep.episode.number)
-      // Keep the most significant episode type
+      // Keep the most significant episode type; Trakt sometimes omits it.
       if (
-        EPISODE_TYPE_PRIORITY[epType] >
-        EPISODE_TYPE_PRIORITY[existing.episode_type]
+        (EPISODE_TYPE_PRIORITY[epType] ?? 0) >
+        (EPISODE_TYPE_PRIORITY[existing.episode_type] ?? 0)
       ) {
         existing.episode_type = epType
       }
@@ -758,12 +750,12 @@ async function updateGitHubTokenSecrets(
   tokens: TraktTokenResponse,
 ): Promise<void> {
   const publicKey = await getRepoPublicKey()
-  await updateGitHubSecret('TRAKT_ACCESS_TOKEN', tokens.access_token, publicKey)
   await updateGitHubSecret(
     'TRAKT_REFRESH_TOKEN',
     tokens.refresh_token,
     publicKey,
   )
+  await updateGitHubSecret('TRAKT_ACCESS_TOKEN', tokens.access_token, publicKey)
 }
 
 // ============================================================================
@@ -799,7 +791,11 @@ async function main() {
   // Group episodes by season + collect all slugs
   console.log('Grouping episodes...')
   const referenceDate = new Date()
-  const grouped = groupHistory(history, referenceDate)
+  // Cut to the output limit before the season fetch
+  const grouped = groupHistory(history, referenceDate).slice(
+    0,
+    OUTPUT_ITEMS_LIMIT,
+  )
   const slugs = collectUniqueSlugs(grouped, rawCalendar)
   console.log(
     `Grouped into ${grouped.length} items, ${slugs.length} unique shows`,
@@ -813,10 +809,7 @@ async function main() {
   ])
 
   // Enrich history and calendar
-  const items = enrichItems(grouped, seasonsMap, ratings, referenceDate).slice(
-    0,
-    OUTPUT_ITEMS_LIMIT,
-  )
+  const items = enrichItems(grouped, seasonsMap, ratings, referenceDate)
   const calendar = enrichCalendar(
     rawCalendar,
     seasonsMap,

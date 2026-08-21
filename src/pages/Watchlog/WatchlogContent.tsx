@@ -1,4 +1,4 @@
-import { formatDistanceToNowStrict } from 'date-fns'
+import { GistStatus, LoadError } from '@/shared'
 import {
   useWatchlogData,
   StatsBar,
@@ -11,33 +11,17 @@ export default function WatchlogContent() {
   const { data, isLoading, error } = useWatchlogData()
 
   if (isLoading) return <WatchlogSkeleton />
-
-  if (error) {
-    return (
-      <div className="text-center py-12">
-        <span className="i-lucide-alert-circle size-12 text-destructive mx-auto mb-4" />
-        <p className="text-muted-foreground">{error}</p>
-      </div>
-    )
-  }
+  if (error) return <LoadError message={error} />
 
   return (
     <>
-      {/* Updated at */}
-      {data?.updated_at && (
-        <p className="-mt-10 mb-12 text-xs text-muted-foreground">
-          Last updated:{' '}
-          {formatDistanceToNowStrict(new Date(data.updated_at), {
-            addSuffix: true,
-          })}
-        </p>
-      )}
+      <GistStatus updatedAt={data?.updated_at} />
 
       {/* Recently Watched */}
       <section className="mb-16">
         <h2 className="section-heading mb-6">Recently Watched</h2>
         <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {data?.items.map((item, index) => (
+          {(data?.items ?? []).map((item, index) => (
             <WatchlogCard key={index} item={item} />
           ))}
         </div>

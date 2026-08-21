@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { WatchlogItem } from '../types'
-import { parseWatchedAt } from '../lib/watched-date'
+import { formatWatchedAtRelative } from '../lib/watched-date'
 import { cn } from '@/shared'
 
 interface WatchlogCardProps {
@@ -19,7 +19,7 @@ function getTypeIcon(type: WatchlogItem['type']): string {
 
 export function WatchlogCard({ item }: WatchlogCardProps) {
   const [imgError, setImgError] = useState(false)
-  const relativeTime = parseWatchedAt(item.watched_at)
+  const relativeTime = formatWatchedAtRelative(item.watched_at)
   const typeIcon = getTypeIcon(item.type)
 
   return (
@@ -47,7 +47,7 @@ export function WatchlogCard({ item }: WatchlogCardProps) {
 
         {/* Rating badge */}
         {item.rating && (
-          <div className="absolute top-2 right-2 flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-sm text-white text-xs font-medium">
+          <div className="badge-overlay flex items-center gap-1 bg-black/60">
             ★ {item.rating}
           </div>
         )}

@@ -14,6 +14,7 @@
  */
 
 import { readFile } from 'node:fs/promises'
+import { requireEnv } from './lib/env.ts'
 import { openGist } from './lib/gist.ts'
 import { mediaStore } from './lib/media-store.ts'
 import type { WhatsnextData, WhatsnextEvent } from '@/features/whatsnext/types'
@@ -40,15 +41,6 @@ const PROMPT_MARKER = '<!-- tail -->'
 // ============================================================================
 // Environment
 // ============================================================================
-
-function requireEnv(name: string): string {
-  const value = process.env[name]
-  if (!value) {
-    console.error(`Missing required environment variable: ${name}`)
-    process.exit(1)
-  }
-  return value
-}
 
 const CHANNELS = requireEnv('WHATSNEXT_CHANNELS')
   .split(',')
@@ -87,17 +79,21 @@ const NAMED_ENTITIES: Record<string, string> = {
 }
 
 function toPlainText(html: string): string {
-  return html
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(
-      /&(?:amp|lt|gt|quot|nbsp);/g,
-      (entity) => NAMED_ENTITIES[entity] ?? entity,
-    )
-    .replace(/&#(\d+);/g, (_, code: string) =>
-      String.fromCodePoint(Number(code)),
-    )
-    .trim()
+  return (
+    html
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(
+        /&(?:amp|lt|gt|quot|nbsp);/g,
+        (entity) => NAMED_ENTITIES[entity] ?? entity,
+      )
+      // fromCodePoint throws past 0x10FFFF, and a throw here freezes the
+      // cursor on that post forever. Leave an impossible number as text.
+      .replace(/&#(\d+);/g, (entity, code: string) =>
+        Number(code) <= 0x10ffff ? String.fromCodePoint(Number(code)) : entity,
+      )
+      .trim()
+  )
 }
 
 function parsePosts(html: string): TelegramPost[] {
@@ -452,8 +448,8 @@ async function extractDelta(
 function toStored(
   id: string,
   entry: ModelEntry,
+  known?: WhatsnextEvent,
   photo?: string,
-  photoRatio?: number,
 ): WhatsnextEvent {
   return {
     id,
@@ -461,9 +457,12 @@ function toStored(
     ...(entry.date_end && { date_end: entry.date_end }),
     title: entry.title,
     description: entry.description,
-    source_posts: entry.source_posts,
+    // Union: the announcing channel keeps its right to cancel.
+    source_posts: [
+      ...new Set([...(known?.source_posts ?? []), ...entry.source_posts]),
+    ],
     ...(photo && { photo }),
-    ...(photoRatio && { photo_ratio: photoRatio }),
+    ...(known?.photo_ratio && { photo_ratio: known.photo_ratio }),
   }
 }
 
@@ -477,7 +476,6 @@ function applyDelta(
   existing: WhatsnextEvent[],
   delta: ModelDelta,
   posts: TelegramPost[],
-  today: string,
 ): WhatsnextEvent[] {
   const byId = new Map(existing.map((event) => [event.id, event]))
   const sent = new Set(posts.map((post) => post.id))
@@ -487,12 +485,17 @@ function applyDelta(
     ),
   )
 
-  // A post that produced exactly one entry lends it its photo; a digest that
-  // produced five would put the same collage on all five.
+  const photoPost = (entry: ModelEntry) =>
+    entry.source_posts.find((post) => photoByPost.has(post))
+
+  // A post lends its photo only to a single photoless entry: a digest would
+  // put one collage on all five. Entries already pictured do not compete.
   const yieldByPost = new Map<string, number>()
   for (const entry of delta.entries_to_write) {
-    const post = entry.source_posts[0]
-    yieldByPost.set(post, (yieldByPost.get(post) ?? 0) + 1)
+    const known = entry.id === null ? undefined : byId.get(entry.id)
+    if (known?.photo) continue
+    const post = photoPost(entry)
+    if (post) yieldByPost.set(post, (yieldByPost.get(post) ?? 0) + 1)
   }
 
   // Seeded from existing ids so a minted id never collides with a stored event.
@@ -524,16 +527,17 @@ function applyDelta(
     const id = known?.id ?? nextId(post, counters)
 
     // An update keeps its photo: its source post is long behind the cursor.
+    const from = photoPost(entry)
     const photo =
       known?.photo ??
-      (yieldByPost.get(post) === 1 ? photoByPost.get(post) : undefined)
+      (from && yieldByPost.get(from) === 1 ? photoByPost.get(from) : undefined)
 
     // A photo arriving from Telegram is measured later, when it is copied into the release.
-    byId.set(id, toStored(id, entry, photo, known?.photo_ratio))
+    byId.set(id, toStored(id, entry, known, photo))
   }
 
   // Cancels last, so an explicit cancellation wins over a same-run rewrite.
-  for (const { id, source_posts } of delta.entries_to_cancel) {
+  for (const { id, source_posts, reason } of delta.entries_to_cancel) {
     const cancellers = new Set(source_posts.map((post) => post.split('/')[0]))
     const target = byId.get(id)
     if (!target) {
@@ -542,6 +546,7 @@ function applyDelta(
       // Only an announcing channel may cancel: a forged cancel is an invisible miss.
       target.source_posts.some((post) => cancellers.has(post.split('/')[0]))
     ) {
+      console.log(`Cancelled ${id} "${target.title}": ${reason}`)
       byId.delete(id)
     } else {
       console.warn(
@@ -550,14 +555,19 @@ function applyDelta(
     }
   }
 
-  return (
-    [...byId.values()]
-      // The only removal path besides cancels; `>=` compares the YYYY-MM-DD
-      // strings extractDelta enforces.
-      .filter((event) => (event.date_end ?? event.date) >= today)
-      // The id tiebreak keeps same-day order stable between runs.
-      .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
+  // The id tiebreak keeps same-day order stable between runs.
+  return [...byId.values()].sort(
+    (a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id),
   )
+}
+
+// The only removal path besides cancels. `>=` compares the YYYY-MM-DD
+// strings extractDelta enforces.
+function dropExpired(
+  events: WhatsnextEvent[],
+  today: string,
+): WhatsnextEvent[] {
+  return events.filter((event) => (event.date_end ?? event.date) >= today)
 }
 
 // ============================================================================
@@ -617,28 +627,31 @@ async function main(): Promise<void> {
   // Collect fresh posts
   console.log('Fetching channel previews...')
   const { posts, cursors } = await collectPosts(state.cursors)
-  if (posts.length === 0) {
-    console.log('No new posts, nothing to do')
-    return
-  }
 
   // Captionless posts (round videos, stickers) are dropped here rather than
   // in the parser, so they still move the cursor.
   const readable = posts.filter((post) => post.text)
   console.log(`Posts: ${posts.length} new, ${readable.length} readable`)
 
+  // Drop finished events.
   const today = zonedDate(new Date())
-  let events = state.events
+  let events = dropExpired(state.events, today)
+  const expired = state.events.length - events.length
+  if (expired > 0) console.log(`Expired: ${expired} events dropped`)
 
   if (readable.length === 0) {
     console.log('No readable posts, advancing cursors only')
   } else {
     // Ask the model for a delta
     console.log(`Asking ${MODEL} about ${readable.length} posts...`)
-    const delta = await extractDelta(today, state.events, readable)
+    const delta = await extractDelta(today, events, readable)
+
+    for (const note of delta.post_notes) {
+      console.log(`  ${note.post}  ${note.says}  -> ${note.verdict}`)
+    }
 
     // Merge
-    const known = new Set(state.events.map((event) => event.id))
+    const known = new Set(events.map((event) => event.id))
     for (const entry of delta.entries_to_write) {
       const target = entry.id !== null && known.has(entry.id) ? entry.id : 'new'
       console.log(`  ${entry.date}  ${entry.title}  [${target}]`)
@@ -650,8 +663,8 @@ async function main(): Promise<void> {
       `Delta: ${delta.entries_to_write.length - updated} new, ${updated} updated, ${delta.entries_to_cancel.length} cancelled`,
     )
 
-    events = applyDelta(state.events, delta, readable, today)
-    console.log(`Events: ${events.length} after merge and expiry`)
+    events = applyDelta(events, delta, readable)
+    console.log(`Events: ${events.length} after merge`)
   }
 
   // Copy fresh photos out of Telegram before their urls expire

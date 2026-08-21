@@ -37,18 +37,16 @@ function SocialLink({
   href,
   icon,
   label,
-  external = true,
 }: {
   href: string
   icon: string
   label: string
-  external?: boolean
 }) {
   return (
     <a
       href={href}
-      target={external ? '_blank' : undefined}
-      rel={external ? 'noopener noreferrer' : undefined}
+      target="_blank"
+      rel="noopener noreferrer"
       className="icon-button"
       aria-label={label}
     >

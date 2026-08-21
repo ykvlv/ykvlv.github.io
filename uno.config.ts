@@ -15,37 +15,23 @@ export default defineConfig({
     colors: {
       background: 'hsl(var(--background))',
       foreground: 'hsl(var(--foreground))',
-      card: {
-        DEFAULT: 'hsl(var(--card))',
-        foreground: 'hsl(var(--card-foreground))',
-      },
+      card: 'hsl(var(--card))',
       primary: {
         DEFAULT: 'hsl(var(--primary))',
         foreground: 'hsl(var(--primary-foreground))',
       },
-      secondary: {
-        DEFAULT: 'hsl(var(--secondary))',
-        foreground: 'hsl(var(--secondary-foreground))',
-      },
+      secondary: 'hsl(var(--secondary))',
       muted: {
         DEFAULT: 'hsl(var(--muted))',
         foreground: 'hsl(var(--muted-foreground))',
       },
-      destructive: {
-        DEFAULT: 'hsl(var(--destructive))',
-        foreground: 'hsl(var(--destructive-foreground))',
-      },
-      success: {
-        DEFAULT: 'hsl(var(--success))',
-        foreground: 'hsl(var(--success-foreground))',
-      },
+      destructive: 'hsl(var(--destructive))',
+      success: 'hsl(var(--success))',
       border: 'hsl(var(--border))',
       ring: 'hsl(var(--ring))',
     },
     borderRadius: {
-      lg: 'var(--radius)',
       md: 'calc(var(--radius) - 2px)',
-      sm: 'calc(var(--radius) - 4px)',
     },
     fontFamily: {
       sans: 'var(--font-sans)',
@@ -57,6 +43,8 @@ export default defineConfig({
     'container-main': 'max-w-[1148px] mx-auto px-4 sm:px-6 lg:px-8',
 
     // Typography
+    'page-title':
+      'font-serif text-3xl sm:text-4xl font-semibold text-foreground',
     'section-heading': 'font-serif text-2xl font-medium text-foreground',
 
     // Interactive
@@ -69,6 +57,10 @@ export default defineConfig({
     'card-surface': 'rounded-2xl border border-border bg-card',
     'card-interactive':
       'card-surface transition-all duration-200 card-hover focusable',
+
+    // Poster pill
+    'badge-overlay':
+      'absolute top-2 right-2 px-2.5 py-1 rounded-full backdrop-blur-sm text-white text-xs font-medium',
 
     // Controls
     'icon-button':

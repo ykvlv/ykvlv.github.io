@@ -4,6 +4,7 @@ import { ErrorBoundary } from '@/shared'
 import Home from '@/pages/Home'
 import Watchlog from '@/pages/Watchlog'
 import Whatsnext from '@/pages/Whatsnext'
+import NotFound from '@/pages/NotFound'
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/watchlog" element={<Watchlog />} />
             <Route path="/whatsnext" element={<Whatsnext />} />
+            <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
       </BrowserRouter>

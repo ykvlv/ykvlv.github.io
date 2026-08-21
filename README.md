@@ -67,6 +67,7 @@ src/
 └── layouts/            # App shell (Header + Footer)
 
 scripts/
+├── lib/                # Shared by both syncs: env, Gist, GitHub, media store
 ├── sync-watchlog.ts    # Trakt to Gist sync script
 ├── sync-whatsnext.ts   # Telegram to LLM to Gist sync script
 └── whatsnext-prompt.md # Every word the LLM reads
@@ -92,7 +93,7 @@ Turns public Telegram channel previews into an event listing:
 - Asks an LLM (via OpenRouter) to turn fresh posts into listing entries
 - Merges the returned delta: upserts, verified cancellations, expiry by date
 - Copies photos into a GitHub release, since Telegram's own urls expire in a day
-- Measures each photo from its JPEG header, so the frontend can reserve its box
+- Measures each photo off its bytes, so the frontend can reserve its box
 - Sweeps release assets only near GitHub's 1000-asset cap, oldest orphans first
 - Writes events and cursors to the Gist in one atomic PATCH
 

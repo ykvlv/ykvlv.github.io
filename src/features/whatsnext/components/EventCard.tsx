@@ -23,6 +23,10 @@ export function EventCard({ event, today, wide }: EventCardProps) {
     <div className={cn(sidePhoto && 'min-h-56')}>
       {/* A broken link keeps its box */}
       {sidePhoto ? (
+        // inset-y-0 measures against the Mosaic's positioned wrapper on purpose:
+        // that box carries the granted height, which a tile stretched to hide a
+        // seam makes taller than this card. A `relative` root here would leave
+        // bare surface under the photo.
         <div
           className={cn(
             'absolute inset-y-0 w-2/5 overflow-hidden bg-muted',

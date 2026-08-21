@@ -8,6 +8,8 @@ export { Skeleton } from './components/ui/skeleton'
 
 // Shared components
 export { ErrorBoundary } from './components/ErrorBoundary'
+export { GistStatus } from './components/GistStatus'
+export { LoadError } from './components/LoadError'
 
 // Hooks
 export { useGistData } from './hooks/useGistData'

@@ -1,5 +1,4 @@
-import { formatDistanceToNowStrict } from 'date-fns'
-import { zonedDate } from '@/shared'
+import { zonedDate, GistStatus, LoadError } from '@/shared'
 import { useWhatsnextData, groupEvents, Mosaic } from '@/features/whatsnext'
 import { WhatsnextSkeleton } from './Skeleton'
 
@@ -7,15 +6,7 @@ export default function WhatsnextContent() {
   const { data, isLoading, error } = useWhatsnextData()
 
   if (isLoading) return <WhatsnextSkeleton />
-
-  if (error) {
-    return (
-      <div className="text-center py-12">
-        <span className="i-lucide-alert-circle size-12 text-destructive mx-auto mb-4" />
-        <p className="text-muted-foreground">{error}</p>
-      </div>
-    )
-  }
+  if (error) return <LoadError message={error} />
 
   const today = zonedDate(new Date())
   const { stream, lasting } = groupEvents(data?.events ?? [])
@@ -23,15 +14,7 @@ export default function WhatsnextContent() {
 
   return (
     <>
-      {/* Updated at */}
-      {data?.updated_at && (
-        <p className="-mt-10 mb-12 text-xs text-muted-foreground">
-          Last updated:{' '}
-          {formatDistanceToNowStrict(new Date(data.updated_at), {
-            addSuffix: true,
-          })}
-        </p>
-      )}
+      <GistStatus updatedAt={data?.updated_at} />
 
       {/* Empty state */}
       {isEmpty && (
