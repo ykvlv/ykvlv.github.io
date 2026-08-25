@@ -40,6 +40,12 @@ interface MediaStore {
    * which cost nothing but a lookup.
    */
   keep(name: string, source: string): Promise<StoredPicture | undefined>
+  /**
+   * How many pictures this run actually fetched and uploaded. Cache hits and
+   * refused sources stay out - callers cannot tell those apart from a copy by
+   * comparing urls, so the store is the one place this can be counted.
+   */
+  copied(): number
   /** Deletes the oldest names nobody kept this run, and only near the cap. */
   sweep(): Promise<void>
 }
@@ -69,6 +75,7 @@ export function mediaStore(
   // Never cleared: within a run it dedupes fetches (a refusal included), and
   // by the end it is the set the sweep must not touch.
   const kept = new Map<string, Promise<StoredPicture | undefined>>()
+  let copies = 0
 
   const id = () =>
     (release ??= (async () => {
@@ -93,7 +100,7 @@ export function mediaStore(
       )
       if (!response.ok) {
         throw new Error(
-          `GitHub API error: ${response.status} - ${await response.text()}`,
+          `Release assets list: ${response.status} - ${await response.text()}`,
         )
       }
       const batch = (await response.json()) as ReleaseAsset[]
@@ -121,7 +128,7 @@ export function mediaStore(
       if (response.status === 422 && detail.includes('already_exists')) {
         return `${base}${name}`
       }
-      throw new Error(`GitHub API error: ${response.status} - ${detail}`)
+      throw new Error(`Asset upload ${name}: ${response.status} - ${detail}`)
     }
     const { browser_download_url } = (await response.json()) as {
       browser_download_url: string
@@ -138,11 +145,13 @@ export function mediaStore(
     try {
       response = await fetch(source)
     } catch (error) {
-      console.warn(`${name}: source unreachable (${error}), no picture`)
+      const cause =
+        error instanceof Error ? (error.cause ?? error.message) : error
+      console.log(`  ${name}: source unreachable (${cause}), no picture`)
       return undefined
     }
     if (!response.ok) {
-      console.warn(`${name}: source answered ${response.status}, no picture`)
+      console.log(`  ${name}: source answered ${response.status}, no picture`)
       return undefined
     }
 
@@ -152,6 +161,7 @@ export function mediaStore(
       bytes,
       response.headers.get('content-type') ?? 'image/jpeg',
     )
+    copies++
     return { url, ratio: await measure(bytes) }
   }
 
@@ -169,6 +179,8 @@ export function mediaStore(
       return picture
     },
 
+    copied: () => copies,
+
     async sweep() {
       // Freshly listed rather than reusing `stored`, which predates this run's
       // own uploads and would undercount the release against the cap.
@@ -183,7 +195,7 @@ export function mediaStore(
       if (doomed.length === 0) {
         // Silence would let the release fill to 1000 and start refusing
         // uploads with nothing in the log to explain it.
-        console.warn(`Release at ${assets.length}, no orphans to sweep`)
+        console.log(`Release at ${assets.length}, no orphans to sweep`)
         return
       }
 
@@ -194,7 +206,7 @@ export function mediaStore(
           { method: 'DELETE', headers },
         )
         if (!response.ok) {
-          console.warn(`${asset.name}: delete failed, ${response.status}`)
+          console.log(`  ${asset.name}: delete failed, ${response.status}`)
           continue
         }
         swept++

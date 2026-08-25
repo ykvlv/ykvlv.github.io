@@ -19,7 +19,7 @@ export function openGist(id: string, token: string): Gist {
       const response = await fetch(url, { headers })
       if (!response.ok) {
         throw new Error(
-          `GitHub API error: ${response.status} - ${await response.text()}`,
+          `Gist read: ${response.status} - ${await response.text()}`,
         )
       }
 
@@ -40,7 +40,7 @@ export function openGist(id: string, token: string): Gist {
       })
       if (!response.ok) {
         throw new Error(
-          `GitHub API error: ${response.status} - ${await response.text()}`,
+          `Gist write ${filename}: ${response.status} - ${await response.text()}`,
         )
       }
     },

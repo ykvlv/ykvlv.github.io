@@ -188,18 +188,18 @@ async function collectPosts(
         // A switched-off preview answers 200 with an empty page, later
         // indistinguishable from "no news" - so only the first run complains.
         if (cursors[channel] === undefined) {
-          console.warn(`${channel}: empty preview, check the name`)
+          console.log(`  ${channel}: empty preview, check the name`)
         }
         continue
       }
 
       posts.push(...fetched)
       advanced[channel] = fetched[fetched.length - 1].num
-      console.log(`${channel}: ${fetched.length} new posts`)
+      console.log(`  ${channel}: ${fetched.length} new`)
     } catch (error) {
       // One dead channel must not take the others down: its cursor stays put.
-      console.warn(
-        `${channel}: ${error instanceof Error ? error.message : String(error)}`,
+      console.log(
+        `  ${channel}: ${error instanceof Error ? error.message : String(error)}`,
       )
       failed++
     }
@@ -430,11 +430,15 @@ async function extractDelta(
       !isRealDate(entry.date) ||
       (entry.date_end !== null && !isRealDate(entry.date_end))
     ) {
-      throw new Error(`Bad date in "${entry.title}"`)
+      throw new Error(
+        `Bad date in "${entry.title}": ${entry.date} .. ${entry.date_end}`,
+      )
     }
     // A reversed range reads as already expired and silently vanishes
     if (entry.date_end !== null && entry.date_end < entry.date) {
-      throw new Error(`date_end before date in "${entry.title}"`)
+      throw new Error(
+        `date_end ${entry.date_end} before date ${entry.date} in "${entry.title}"`,
+      )
     }
   }
 
@@ -507,6 +511,9 @@ function applyDelta(
     }
   }
 
+  const total = delta.entries_to_write.length + delta.entries_to_cancel.length
+  if (total > 0) group(`Delta (${total})`)
+
   for (const entry of delta.entries_to_write) {
     const post = entry.source_posts[0]
     const known = entry.id === null ? undefined : byId.get(entry.id)
@@ -514,14 +521,18 @@ function applyDelta(
     // A new entry may only cite posts of this batch: posts are public input,
     // and a foreign id would mint into another channel's namespace.
     if (!known && !sent.has(post)) {
-      console.warn(
-        `${entry.title}: source post ${post} not in this batch, dropped`,
+      console.log(
+        `  ! ${oneline(entry.title)}: source post ${post} not in this batch, dropped`,
       )
       continue
     }
+    // An id neither copied from the listing nor null is fabricated, and gets
+    // the same answer as any forged reference: rejected, not guessed around.
     if (entry.id !== null && !known) {
-      // Filed as new rather than dropped: a missing event is worse than a repeat.
-      console.warn(`No entry with id ${entry.id}, filing it as new`)
+      console.log(
+        `  ! ${oneline(entry.title)}: unknown id ${entry.id}, dropped`,
+      )
+      continue
     }
 
     const id = known?.id ?? nextId(post, counters)
@@ -534,6 +545,7 @@ function applyDelta(
 
     // A photo arriving from Telegram is measured later, when it is copied into the release.
     byId.set(id, toStored(id, entry, known, photo))
+    console.log(`  ${known ? '~' : '+'} ${entry.date}  ${oneline(entry.title)}`)
   }
 
   // Cancels last, so an explicit cancellation wins over a same-run rewrite.
@@ -541,19 +553,21 @@ function applyDelta(
     const cancellers = new Set(source_posts.map((post) => post.split('/')[0]))
     const target = byId.get(id)
     if (!target) {
-      console.warn(`Cancel of ${id} ignored: no such entry`)
+      console.log(`  ! cancel of ${id} ignored: no such entry`)
     } else if (
       // Only an announcing channel may cancel: a forged cancel is an invisible miss.
       target.source_posts.some((post) => cancellers.has(post.split('/')[0]))
     ) {
-      console.log(`Cancelled ${id} "${target.title}": ${reason}`)
+      console.log(`  - ${id}  "${oneline(target.title)}"  (${oneline(reason)})`)
       byId.delete(id)
     } else {
-      console.warn(
-        `Cancel of ${id} by ${source_posts.join(', ')} ignored: foreign channel`,
+      console.log(
+        `  ! ${id}  cancel by ${source_posts.join(', ')} ignored: foreign channel`,
       )
     }
   }
+
+  if (total > 0) endGroup()
 
   // The id tiebreak keeps same-day order stable between runs.
   return [...byId.values()].sort(
@@ -561,13 +575,24 @@ function applyDelta(
   )
 }
 
-// The only removal path besides cancels. `>=` compares the YYYY-MM-DD
+// The only removal path besides cancels. `<` compares the YYYY-MM-DD
 // strings extractDelta enforces.
 function dropExpired(
   events: WhatsnextEvent[],
   today: string,
 ): WhatsnextEvent[] {
-  return events.filter((event) => (event.date_end ?? event.date) >= today)
+  const over = (event: WhatsnextEvent) => (event.date_end ?? event.date) < today
+
+  const expired = events.filter(over)
+  if (expired.length > 0) {
+    group(`Expired (${expired.length})`)
+    for (const event of expired) {
+      console.log(`  - ${event.date}  ${oneline(event.title)}`)
+    }
+    endGroup()
+  }
+
+  return events.filter((event) => !over(event))
 }
 
 // ============================================================================
@@ -584,7 +609,6 @@ async function rehostPhotos(
   events: WhatsnextEvent[],
 ): Promise<WhatsnextEvent[]> {
   const rehosted: WhatsnextEvent[] = []
-  let count = 0
 
   for (const event of events) {
     if (!event.photo) {
@@ -593,8 +617,6 @@ async function rehostPhotos(
     }
 
     const kept = await media.keep(assetName(event.id), event.photo)
-    // A stored photo is already a release url, so a changed url means a copy.
-    if (kept && kept.url !== event.photo) count++
     rehosted.push({
       ...event,
       photo: kept?.url,
@@ -604,13 +626,28 @@ async function rehostPhotos(
     })
   }
 
-  if (count > 0) console.log(`Photos: ${count} copied into the release`)
+  if (media.copied() > 0) console.log(`Photos: ${media.copied()} rehosted`)
   return rehosted
 }
 
 // ============================================================================
 // Main
 // ============================================================================
+
+// ::group:: folds a block in the Actions log viewer; locally it's just a title.
+const IN_ACTIONS = Boolean(process.env.GITHUB_ACTIONS)
+
+function group(title: string): void {
+  console.log(IN_ACTIONS ? `::group::${title}` : title)
+}
+
+function endGroup(): void {
+  if (IN_ACTIONS) console.log('::endgroup::')
+}
+
+function oneline(text: string): string {
+  return text.replace(/\s+/g, ' ').trim()
+}
 
 async function main(): Promise<void> {
   // Read the stored listing
@@ -633,11 +670,9 @@ async function main(): Promise<void> {
   const readable = posts.filter((post) => post.text)
   console.log(`Posts: ${posts.length} new, ${readable.length} readable`)
 
-  // Drop finished events.
+  // Drop finished events
   const today = zonedDate(new Date())
   let events = dropExpired(state.events, today)
-  const expired = state.events.length - events.length
-  if (expired > 0) console.log(`Expired: ${expired} events dropped`)
 
   if (readable.length === 0) {
     console.log('No readable posts, advancing cursors only')
@@ -646,23 +681,18 @@ async function main(): Promise<void> {
     console.log(`Asking ${MODEL} about ${readable.length} posts...`)
     const delta = await extractDelta(today, events, readable)
 
+    const width = Math.max(
+      ...delta.post_notes.map((note) => oneline(note.verdict).length),
+    )
+    group(`Post notes (${delta.post_notes.length})`)
     for (const note of delta.post_notes) {
-      console.log(`  ${note.post}  ${note.says}  -> ${note.verdict}`)
+      console.log(
+        `  ${oneline(note.verdict).padEnd(width)}  ${note.post}  ${oneline(note.says)}`,
+      )
     }
+    endGroup()
 
     // Merge
-    const known = new Set(events.map((event) => event.id))
-    for (const entry of delta.entries_to_write) {
-      const target = entry.id !== null && known.has(entry.id) ? entry.id : 'new'
-      console.log(`  ${entry.date}  ${entry.title}  [${target}]`)
-    }
-    const updated = delta.entries_to_write.filter(
-      (entry) => entry.id !== null && known.has(entry.id),
-    ).length
-    console.log(
-      `Delta: ${delta.entries_to_write.length - updated} new, ${updated} updated, ${delta.entries_to_cancel.length} cancelled`,
-    )
-
     events = applyDelta(events, delta, readable)
     console.log(`Events: ${events.length} after merge`)
   }
@@ -685,6 +715,11 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
+  if (IN_ACTIONS) {
+    console.log(
+      `::error::${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
   console.error('Error:', error)
   process.exit(1)
 })

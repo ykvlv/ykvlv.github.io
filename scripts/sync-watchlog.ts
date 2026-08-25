@@ -59,6 +59,8 @@ const GH_REPOSITORY = requireEnv('GH_REPOSITORY')
 const gist = openGist(GIST_ID, GH_TOKEN)
 const media = mediaStore(GH_REPOSITORY, MEDIA_RELEASE_TAG, GH_TOKEN)
 
+const IN_ACTIONS = Boolean(process.env.GITHUB_ACTIONS)
+
 // ============================================================================
 // Trakt API Types
 // ============================================================================
@@ -225,13 +227,15 @@ class TraktClient {
 
       // Update GitHub secrets
       await updateGitHubTokenSecrets(newTokens)
-      console.log('Token refreshed and validated successfully')
+      console.log('Token refreshed and validated')
+    } else if (!response.ok) {
+      // Anything but 401 is not "expired": say so instead of dying later
+      // on a Trakt error that looks unrelated.
+      console.log(`  token probe answered ${response.status}, proceeding`)
     }
   }
 
   private async refreshTokens(): Promise<TraktTokenResponse> {
-    console.log('Refreshing Trakt tokens...')
-
     const response = await fetch(`${TRAKT_API_BASE}/oauth/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -250,9 +254,7 @@ class TraktClient {
       )
     }
 
-    const data = (await response.json()) as TraktTokenResponse
-    console.log('Trakt tokens refreshed successfully')
-    return data
+    return (await response.json()) as TraktTokenResponse
   }
 
   private async get<T>(endpoint: string): Promise<T> {
@@ -261,7 +263,7 @@ class TraktClient {
     })
 
     if (!response.ok) {
-      throw new Error(`Trakt API error: ${response.status} - ${endpoint}`)
+      throw new Error(`${endpoint} -> ${response.status}`)
     }
 
     return (await response.json()) as T
@@ -321,7 +323,7 @@ class TraktClient {
       return new Map(seasons.map((s) => [s.number, s]))
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      console.warn(`Failed to fetch seasons for ${slug}: ${message}`)
+      console.log(`  ${slug}: seasons fetch failed (${message})`)
       return new Map()
     }
   }
@@ -679,6 +681,7 @@ async function rehostPosters(cards: { poster?: string }[]): Promise<void> {
     if (!card.poster) continue
     card.poster = (await media.keep(assetName(card.poster), card.poster))?.url
   }
+  if (media.copied() > 0) console.log(`Posters: ${media.copied()} rehosted`)
 }
 
 // ============================================================================
@@ -743,7 +746,7 @@ async function updateGitHubSecret(
     )
   }
 
-  console.log(`Updated GitHub secret: ${name}`)
+  console.log(`  ${name} updated`)
 }
 
 async function updateGitHubTokenSecrets(
@@ -782,14 +785,13 @@ async function main() {
     client.getRawCalendar(),
   ])
   console.log(
-    `History: ${history.length}, Calendar: ${rawCalendar.episodes.length} episodes, ${rawCalendar.movies.length} movies`,
+    `History: ${history.length} items, Calendar: ${rawCalendar.episodes.length} episodes, ${rawCalendar.movies.length} movies`,
   )
   console.log(
     `Stats: ${stats.movies_watched} movies, ${stats.shows_watched} shows, ${stats.total_hours}h`,
   )
 
   // Group episodes by season + collect all slugs
-  console.log('Grouping episodes...')
   const referenceDate = new Date()
   // Cut to the output limit before the season fetch
   const grouped = groupHistory(history, referenceDate).slice(
@@ -798,7 +800,7 @@ async function main() {
   )
   const slugs = collectUniqueSlugs(grouped, rawCalendar)
   console.log(
-    `Grouped into ${grouped.length} items, ${slugs.length} unique shows`,
+    `Grouped into ${grouped.length} items, ${slugs.length} shows to look up`,
   )
 
   // Fetch seasons and ratings in parallel
@@ -815,10 +817,11 @@ async function main() {
     seasonsMap,
     zonedDate(referenceDate),
   )
-  console.log(`Output: ${items.length} items, ${calendar.length} calendar`)
+  console.log(
+    `Output: ${items.length} items, ${calendar.length} calendar entries`,
+  )
 
   // Copy posters into the release and point the cards at it
-  console.log('Rehosting posters...')
   await rehostPosters([...items, ...calendar])
 
   // Assemble the payload
@@ -839,6 +842,11 @@ async function main() {
 }
 
 main().catch((error) => {
+  if (IN_ACTIONS) {
+    console.log(
+      `::error::${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
   console.error('Error:', error)
   process.exit(1)
 })
