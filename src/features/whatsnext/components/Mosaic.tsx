@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { cn } from '@/shared'
 import type { WhatsnextEvent } from '../types'
 import { hashId } from '../lib/hash'
+import { sortKey } from '../lib/events'
 import { packTiles } from '../lib/pack'
 import { EventCard } from './EventCard'
 import { MosaicSkeleton } from './MosaicSkeleton'
@@ -65,8 +66,7 @@ export function Mosaic({ events, today }: MosaicProps) {
           id: e.id,
           span: isWide(e) ? 2 : 1,
           height: heights[e.id],
-          // The section's own sort key: date for the stream, end for lasting
-          day: e.date_end ?? e.date,
+          day: sortKey(e),
         })),
         cols,
         GAP,

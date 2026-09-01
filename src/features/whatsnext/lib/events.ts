@@ -1,26 +1,33 @@
-import { civilDate } from '@/shared'
+import { civilDate, shiftDate } from '@/shared'
 import type { WhatsnextEvent } from '../types'
 
 export interface GroupedEvents {
-  /** One-day events, in date order */
+  /** Single days and short ranges, in date order */
   stream: WhatsnextEvent[]
-  /** Events with a duration (`date_end`) */
+  /** Events running longer than a few days */
   lasting: WhatsnextEvent[]
 }
 
+// A range this short is still one visit to plan, so it stays in the stream
+const SHORT_RANGE_DAYS = 3
+
+export const isLasting = (e: WhatsnextEvent): boolean =>
+  e.date_end !== undefined && e.date_end > shiftDate(e.date, SHORT_RANGE_DAYS)
+
+/** The section's own sort key: start for the stream, end for lasting */
+export const sortKey = (e: WhatsnextEvent): string =>
+  (isLasting(e) && e.date_end) || e.date
+
 export function groupEvents(events: WhatsnextEvent[]): GroupedEvents {
+  // Sorted by the key each section reads, so whatever closes first comes first
   const sorted = [...events].sort(
-    (a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title),
+    (a, b) =>
+      sortKey(a).localeCompare(sortKey(b)) || a.title.localeCompare(b.title),
   )
 
   return {
-    stream: sorted.filter((e) => !e.date_end),
-    // Sorted by end date, so whatever closes first – comes first
-    lasting: sorted
-      .filter((e) => e.date_end)
-      .sort((a, b) =>
-        (a.date_end as string).localeCompare(b.date_end as string),
-      ),
+    stream: sorted.filter((e) => !isLasting(e)),
+    lasting: sorted.filter(isLasting),
   }
 }
 
