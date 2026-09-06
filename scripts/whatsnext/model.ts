@@ -51,17 +51,17 @@ const SOURCE_POSTS_SCHEMA = {
   minItems: 1,
 }
 
-// Key order matters: the model writes fields in this order, prose before dates.
+// Key order matters: the model writes fields in this order, dates go before
 const ENTRY_PROPERTIES = {
   source_posts: SOURCE_POSTS_SCHEMA,
   title: str('Заголовок записи в афише'),
-  description: str('Текст записи одним куском, без переносов строк'),
   date: str(
     'Первый день события, который ещё не прошёл: календарная дата YYYY-MM-DD',
   ),
   date_end: nullable(
     'Последний день события, которое идёт несколько дней или повторяется: YYYY-MM-DD, не раньше date; null, если событие в один день',
   ),
+  description: str('Текст записи одним куском, без переносов строк'),
 } satisfies Record<keyof Omit<ModelEntry, 'id'>, unknown>
 
 // post_notes first: the model accounts for every post before writing entries.
