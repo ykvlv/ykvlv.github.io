@@ -262,7 +262,7 @@ class TraktClient {
       headers: this.getHeaders(),
     })
 
-    if (!response.ok) {
+    if (response.status !== 200) {
       throw new Error(`${endpoint} -> ${response.status}`)
     }
 
@@ -273,15 +273,25 @@ class TraktClient {
     return this.get(`/sync/history?extended=images&limit=${HISTORY_LIMIT}`)
   }
 
-  async getStats(): Promise<WatchlogStats> {
-    const stats = await this.get<TraktStats>('/users/me/stats')
-    return {
-      movies_watched: stats.movies.watched,
-      shows_watched: stats.shows.watched,
-      total_hours: Math.round(
-        (stats.movies.minutes + stats.episodes.minutes) / 60,
-      ),
-    }
+  // Trakt can answer 204 with an empty body here (trakt/trakt-api#929).
+  async getStats(): Promise<WatchlogStats | undefined> {
+    const stats = await this.get<TraktStats>('/users/me/stats').catch(
+      (error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error)
+        console.log(`  stats unavailable: ${message}`)
+        return undefined
+      },
+    )
+
+    return (
+      stats && {
+        movies_watched: stats.movies.watched,
+        shows_watched: stats.shows.watched,
+        total_hours: Math.round(
+          (stats.movies.minutes + stats.episodes.minutes) / 60,
+        ),
+      }
+    )
   }
 
   async getRatings(): Promise<Ratings> {
@@ -343,9 +353,9 @@ class TraktClient {
     // A window from today may lose some episodes
     const start = shiftDate(zonedDate(new Date()), -1)
 
-    // `days` covers [from, from + days - 1], so windows butt up without a gap.
+    // `days` covers [from, from + days], so the step is one day more.
     const starts: string[] = []
-    for (let day = 0; day <= CALENDAR_DAYS; day += CALENDAR_WINDOW_DAYS) {
+    for (let day = 0; day <= CALENDAR_DAYS; day += CALENDAR_WINDOW_DAYS + 1) {
       starts.push(shiftDate(start, day))
     }
 
@@ -787,9 +797,11 @@ async function main() {
   console.log(
     `History: ${history.length} items, Calendar: ${rawCalendar.episodes.length} episodes, ${rawCalendar.movies.length} movies`,
   )
-  console.log(
-    `Stats: ${stats.movies_watched} movies, ${stats.shows_watched} shows, ${stats.total_hours}h`,
-  )
+  if (stats) {
+    console.log(
+      `Stats: ${stats.movies_watched} movies, ${stats.shows_watched} shows, ${stats.total_hours}h`,
+    )
+  }
 
   // Group episodes by season + collect all slugs
   const referenceDate = new Date()

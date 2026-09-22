@@ -35,10 +35,12 @@ export default function WatchlogContent() {
       </section>
 
       {/* Stats */}
-      <section>
-        <h2 className="section-heading mb-6">Statistics</h2>
-        <StatsBar stats={data?.stats} />
-      </section>
+      {data?.stats && (
+        <section>
+          <h2 className="section-heading mb-6">Statistics</h2>
+          <StatsBar stats={data.stats} />
+        </section>
+      )}
     </>
   )
 }

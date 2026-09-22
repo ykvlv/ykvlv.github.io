@@ -22,7 +22,7 @@ jobs:
       - name: 🎭 Sync Telegram events to Gist
         run: bun run scripts/sync-whatsnext.ts
         env:
-          WHATSNEXT_CHANNELS: ${{ secrets.WHATSNEXT_CHANNELS }}
+          WHATSNEXT_CHANNELS: ${{ vars.WHATSNEXT_CHANNELS }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           GIST_ID: ${{ vars.GIST_ID }}
           GIST_FILENAME_WHATSNEXT: ${{ vars.GIST_FILENAME_WHATSNEXT }}

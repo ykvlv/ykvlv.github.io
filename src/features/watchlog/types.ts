@@ -37,6 +37,6 @@ export interface CalendarItem {
 export interface WatchlogData {
   updated_at: string
   items: WatchlogItem[]
-  stats: WatchlogStats
+  stats?: WatchlogStats
   calendar: CalendarItem[]
 }
